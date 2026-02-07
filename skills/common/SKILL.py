@@ -8,10 +8,12 @@ Shared utilities, helpers, and constants used across all agents.
 import asyncio
 import json
 import logging
+import logging.handlers
 import os
+import random
 import re
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -120,8 +122,15 @@ class AsyncHTTPClient:
     DEFAULT_TIMEOUT = 30
     DEFAULT_RETRIES = 3
     DEFAULT_BACKOFF = 2.0
+    MAX_BACKOFF = 60
+    RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 
-    USER_AGENT = "NAM-IntelBot/1.0 (Manufacturing Intelligence Pipeline)"
+    # Use a browser-like UA to avoid WAF blocks on association websites.
+    # The bot identifier is included as a secondary token per convention.
+    USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NAM-IntelBot/1.0"
+    )
 
     def __init__(self, rate_limiter: RateLimiter = None):
         self.rate_limiter = rate_limiter or RateLimiter()
@@ -209,12 +218,31 @@ class AsyncHTTPClient:
                     await asyncio.sleep(retry_after)
                     continue
 
+                # Handle retryable server errors (5xx)
+                if response.status_code in self.RETRYABLE_STATUS_CODES:
+                    last_error = httpx.HTTPStatusError(
+                        f"Server error {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
+                    if attempt < retries:
+                        wait = min(
+                            self.DEFAULT_BACKOFF ** attempt + random.uniform(0, 1),
+                            self.MAX_BACKOFF,
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+                    return response  # Return last response if all retries exhausted
+
                 return response
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
                 if attempt < retries:
-                    wait = self.DEFAULT_BACKOFF ** attempt
+                    wait = min(
+                        self.DEFAULT_BACKOFF ** attempt + random.uniform(0, 1),
+                        self.MAX_BACKOFF,
+                    )
                     await asyncio.sleep(wait)
 
         raise last_error or Exception(f"Request failed after {retries} retries")
@@ -224,12 +252,27 @@ class AsyncHTTPClient:
 # STRUCTURED LOGGER
 # ============================================================================
 
+class JsonFormatter(logging.Formatter):
+    """Formats log records as single-line JSON for file output."""
+
+    def format(self, record):
+        log_entry = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        if hasattr(record, "extra_fields"):
+            log_entry.update(record.extra_fields)
+        return json.dumps(log_entry, default=str)
+
+
 class StructuredLogger:
     """JSON-structured logging for pipeline operations."""
 
     def __init__(self, agent_type: str, job_id: str = None):
         self.agent_type = agent_type
         self.job_id = job_id
+        self._json_file_handler = None
 
         # Setup logger
         self.logger = logging.getLogger(f"nam_intel.{agent_type}")
@@ -242,6 +285,25 @@ class StructuredLogger:
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
 
+    def setup_file_logging(
+        self,
+        log_dir: str = "data/logs",
+        max_bytes: int = 10_485_760,
+        backup_count: int = 5,
+    ):
+        """Add a rotating JSON file handler alongside the existing stdout handler."""
+        log_path = Path(log_dir)
+        log_path.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_path / f"{self.agent_type}.log",
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+        )
+        file_handler.setFormatter(JsonFormatter())
+        self.logger.addHandler(file_handler)
+        self._json_file_handler = file_handler
+
     def _format(self, message: str, **kwargs) -> str:
         """Format message with context."""
         context = {
@@ -252,21 +314,35 @@ class StructuredLogger:
         context_str = " ".join(f"{k}={v}" for k, v in context.items() if v is not None)
         return f"{message} [{context_str}]"
 
+    def _log(self, level: int, message: str, **kwargs):
+        """Internal log method that attaches extra fields for JSON formatter."""
+        formatted = self._format(message, **kwargs)
+        extra_fields = {
+            "agent": self.agent_type,
+            "job_id": self.job_id,
+            **{k: v for k, v in kwargs.items() if v is not None},
+        }
+        record = self.logger.makeRecord(
+            self.logger.name, level, "(unknown)", 0, formatted, (), None
+        )
+        record.extra_fields = extra_fields
+        self.logger.handle(record)
+
     def debug(self, message: str, **kwargs):
         """Log debug message."""
-        self.logger.debug(self._format(message, **kwargs))
+        self._log(logging.DEBUG, message, **kwargs)
 
     def info(self, message: str, **kwargs):
         """Log info message."""
-        self.logger.info(self._format(message, **kwargs))
+        self._log(logging.INFO, message, **kwargs)
 
     def warning(self, message: str, **kwargs):
         """Log warning message."""
-        self.logger.warning(self._format(message, **kwargs))
+        self._log(logging.WARNING, message, **kwargs)
 
     def error(self, message: str, **kwargs):
         """Log error message."""
-        self.logger.error(self._format(message, **kwargs))
+        self._log(logging.ERROR, message, **kwargs)
 
 
 # ============================================================================
@@ -505,6 +581,19 @@ PARSERS = {
     ),
 
     "integer": lambda s: int(re.sub(r'[^\d]', '', str(s))) if s else None,
+
+    # PMA-specific parsers: <cite> contains "City, ST"
+    "pma_city": lambda s: s.rsplit(",", 1)[0].strip().title() if s and "," in s else None,
+
+    "pma_state": lambda s: (
+        s.rsplit(",", 1)[1].strip().upper()[:2] if s and "," in s else None
+    ),
+
+    # Extract member ID from PMA profile URL like profile.asp?id=00722807
+    "pma_member_id": lambda s: (
+        re.search(r'[?&]id=(\d+)', str(s)).group(1)
+        if s and re.search(r'[?&]id=(\d+)', str(s)) else None
+    ),
 }
 
 

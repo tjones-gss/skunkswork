@@ -7,6 +7,7 @@ All agents inherit from this base class.
 
 import asyncio
 import json
+import os
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, UTC
@@ -213,15 +214,26 @@ class BaseAgent(ABC):
         schemas = self.config.load(f"schemas/{schema_name}")
         return schemas.get(schema_name, schemas.get("default", {}))
     
-    def save_records(self, records: list[dict], output_path: str):
-        """Save records to JSONL file."""
+    def save_records(self, records: list[dict], output_path: str) -> int:
+        """Save records to JSONL file with atomic write.
+
+        Returns:
+            Number of records saved, or -1 on failure.
+        """
         path = Path(output_path)
+        tmp_path = path.with_suffix(".tmp")
         path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with JSONLWriter(str(path)) as writer:
-            writer.write_batch(records)
-        
-        self.log.info(f"Saved {len(records)} records to {output_path}")
+
+        try:
+            with JSONLWriter(str(tmp_path)) as writer:
+                writer.write_batch(records)
+            os.replace(str(tmp_path), str(path))
+            self.log.info(f"Saved {len(records)} records to {output_path}")
+            return len(records)
+        except OSError as e:
+            self.log.warning(f"save_records failed: {e}")
+            tmp_path.unlink(missing_ok=True)
+            return -1
     
     def load_records(self, input_path: str) -> list[dict]:
         """Load records from JSONL file."""
@@ -230,35 +242,95 @@ class BaseAgent(ABC):
         reader = JSONLReader(input_path)
         return reader.read_all()
     
-    async def checkpoint(self, state: dict):
-        """Save a checkpoint for recovery."""
+    async def checkpoint(self, state: dict) -> bool:
+        """Save a checkpoint for recovery using atomic write.
+
+        Returns:
+            True if checkpoint was saved successfully, False otherwise.
+        """
         checkpoint_path = Path("data/.state") / f"{self.job_id}.checkpoint.json"
+        tmp_path = checkpoint_path.with_suffix(".tmp")
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        checkpoint = {
+
+        checkpoint_data = {
             "job_id": self.job_id,
             "agent_type": self.agent_type,
             "timestamp": datetime.now(UTC).isoformat(),
-            "state": state
+            "state": state,
         }
-        
-        with open(checkpoint_path, "w") as f:
-            json.dump(checkpoint, f)
-        
-        self.log.debug("Checkpoint saved", state_keys=list(state.keys()))
+
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(checkpoint_data, f)
+            os.replace(str(tmp_path), str(checkpoint_path))
+            self.log.debug("Checkpoint saved", state_keys=list(state.keys()))
+            return True
+        except OSError as e:
+            self.log.warning(f"Checkpoint save failed: {e}")
+            tmp_path.unlink(missing_ok=True)
+            return False
     
     def load_checkpoint(self) -> Optional[dict]:
-        """Load a checkpoint if it exists."""
+        """Load a checkpoint if it exists. Returns None on missing/corrupt files."""
         checkpoint_path = Path("data/.state") / f"{self.job_id}.checkpoint.json"
-        
+
         if not checkpoint_path.exists():
             return None
-        
-        with open(checkpoint_path) as f:
-            checkpoint = json.load(f)
-        
-        self.log.info("Checkpoint loaded", timestamp=checkpoint.get("timestamp"))
-        return checkpoint.get("state")
+
+        try:
+            with open(checkpoint_path) as f:
+                checkpoint = json.load(f)
+            self.log.info("Checkpoint loaded", timestamp=checkpoint.get("timestamp"))
+            return checkpoint.get("state")
+        except (json.JSONDecodeError, OSError) as e:
+            self.log.warning(f"Failed to load checkpoint: {e}")
+            return None
+
+
+class DeadLetterQueue:
+    """Captures failed tasks/records for later investigation or retry."""
+
+    def __init__(self, queue_dir: str = "data/dead_letter"):
+        self.queue_dir = Path(queue_dir)
+        self.queue_dir.mkdir(parents=True, exist_ok=True)
+        self._file_path = self.queue_dir / f"dlq_{datetime.now(UTC).strftime('%Y%m%d')}.jsonl"
+
+    def push(self, task: dict, error: str, agent_type: str = "", context: dict = None):
+        """Write a failed task to the dead-letter queue."""
+        entry = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "agent_type": agent_type,
+            "task": task,
+            "error": error,
+            "context": context or {},
+        }
+        try:
+            with open(self._file_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except OSError:
+            pass  # DLQ itself should never crash the pipeline
+
+    def read_all(self) -> list[dict]:
+        """Read all DLQ entries from today's file."""
+        entries = []
+        if not self._file_path.exists():
+            return entries
+        try:
+            with open(self._file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            entries.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        except OSError:
+            pass
+        return entries
+
+    def count(self) -> int:
+        """Count pending DLQ entries in today's file."""
+        return len(self.read_all())
 
 
 class AgentSpawner:
@@ -308,6 +380,7 @@ class AgentSpawner:
     def __init__(self, job_id: str = None):
         self.job_id = job_id or str(uuid.uuid4())
         self.log = StructuredLogger("spawner", self.job_id)
+        self.dlq = DeadLetterQueue()
     
     def _load_agent_class(self, agent_type: str):
         """Dynamically load an agent class."""
@@ -325,49 +398,57 @@ class AgentSpawner:
         self,
         agent_type: str,
         task: dict,
-        timeout: int = 300
+        timeout: int = 300,
+        _push_dlq: bool = True,
     ) -> dict:
         """
         Spawn a single agent and wait for completion.
-        
+
         Args:
             agent_type: Type of agent to spawn
             task: Task configuration
             timeout: Maximum execution time in seconds
-            
+            _push_dlq: Whether to push failures to DLQ (False when called from spawn_parallel)
+
         Returns:
             Agent result dictionary
         """
         self.log.info(f"Spawning agent: {agent_type}")
-        
+
         try:
             AgentClass = self._load_agent_class(agent_type)
             agent = AgentClass(agent_type=agent_type, job_id=self.job_id)
-            
+
             # Execute with timeout
             result = await asyncio.wait_for(
                 agent.execute(task),
                 timeout=timeout
             )
-            
+
             return result
-            
+
         except asyncio.TimeoutError:
             self.log.error(f"Agent {agent_type} timed out after {timeout}s")
-            return {
+            error_result = {
                 "success": False,
                 "error": f"Timeout after {timeout}s",
                 "error_type": "TimeoutError",
-                "records_processed": 0
+                "records_processed": 0,
             }
+            if _push_dlq:
+                self.dlq.push(task, error_result["error"], agent_type)
+            return error_result
         except Exception as e:
             self.log.error(f"Failed to spawn agent {agent_type}: {e}")
-            return {
+            error_result = {
                 "success": False,
                 "error": str(e),
                 "error_type": type(e).__name__,
-                "records_processed": 0
+                "records_processed": 0,
             }
+            if _push_dlq:
+                self.dlq.push(task, str(e), agent_type)
+            return error_result
     
     async def spawn_parallel(
         self,
@@ -397,23 +478,40 @@ class AgentSpawner:
         
         async def limited_spawn(task):
             async with semaphore:
-                return await self.spawn(agent_type, task, timeout)
-        
+                return await self.spawn(agent_type, task, timeout, _push_dlq=False)
+
         results = await asyncio.gather(
             *[limited_spawn(task) for task in tasks],
             return_exceptions=True
         )
-        
-        # Convert exceptions to error results
+
+        # Convert exceptions and enrich error results with task context
         processed_results = []
         for i, result in enumerate(results):
+            task_ref = tasks[i].get("url", tasks[i].get("id", f"task_{i}"))
             if isinstance(result, Exception):
-                processed_results.append({
+                error_result = {
                     "success": False,
                     "error": str(result),
                     "error_type": type(result).__name__,
-                    "records_processed": 0
-                })
+                    "records_processed": 0,
+                    "task_index": i,
+                    "task_ref": task_ref,
+                }
+                processed_results.append(error_result)
+                self.dlq.push(
+                    tasks[i], str(result), agent_type,
+                    context={"task_index": i, "task_ref": task_ref},
+                )
+            elif isinstance(result, dict) and not result.get("success", True):
+                # Enrich failed results from spawn() with task context
+                result["task_index"] = i
+                result["task_ref"] = task_ref
+                processed_results.append(result)
+                self.dlq.push(
+                    tasks[i], result.get("error", "Unknown error"), agent_type,
+                    context={"task_index": i, "task_ref": task_ref},
+                )
             else:
                 processed_results.append(result)
         

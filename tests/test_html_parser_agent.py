@@ -1496,3 +1496,270 @@ class TestDirectoryParserAutoExtract:
         beta = [r for r in result["records"] if "Beta" in r.get("company_name", "")]
         assert len(beta) == 1
         assert beta[0]["company_name"] == "Beta Industries"
+
+
+# =============================================================================
+# TEST STRUCTURED ERROR DETAIL (Phase 7)
+# =============================================================================
+
+
+class TestDirectoryParserStructuredErrors:
+    """Tests for structured error responses with url, attempted_methods, duration_ms."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_error_response_includes_url(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Error responses include 'url' field."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+
+        result = await agent.run({
+            "url": "https://example.com/directory",
+            "association": "PMA"
+        })
+
+        assert result["url"] == "https://example.com/directory"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_error_response_includes_attempted_methods(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Error responses include 'attempted_methods' list."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+
+        result = await agent.run({
+            "url": "https://example.com/directory",
+            "association": "PMA"
+        })
+
+        assert "attempted_methods" in result
+        assert "httpx" in result["attempted_methods"]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_error_response_includes_duration_ms(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Error responses include 'duration_ms' field."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+
+        result = await agent.run({
+            "url": "https://example.com/directory",
+            "association": "PMA"
+        })
+
+        assert "duration_ms" in result
+        assert isinstance(result["duration_ms"], int)
+        assert result["duration_ms"] >= 0
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_success_response_includes_url(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        sample_member_directory_html
+    ):
+        """Success responses also include url field."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = sample_member_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {
+            "list_container": ".directory",
+            "list_item": ".member-item",
+            "company_name": {"selectors": ["h3.company-name"]},
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/directory",
+            "association": "PMA"
+        })
+
+        assert result["url"] == "https://example.com/directory"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_success_response_includes_duration(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        sample_member_directory_html
+    ):
+        """Success responses include duration_ms."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = sample_member_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {
+            "list_container": ".directory",
+            "list_item": ".member-item",
+            "company_name": {"selectors": ["h3.company-name"]},
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/directory",
+            "association": "PMA"
+        })
+
+        assert result["duration_ms"] >= 0
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_success_response_includes_attempted_methods(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        sample_member_directory_html
+    ):
+        """Success responses include attempted_methods."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = sample_member_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {
+            "list_container": ".directory",
+            "list_item": ".member-item",
+            "company_name": {"selectors": ["h3.company-name"]},
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/directory",
+            "association": "PMA"
+        })
+
+        assert result["attempted_methods"] == ["httpx"]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_no_url_error_has_empty_methods(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """No URL error response has empty attempted_methods."""
+        mock_config.return_value.load.return_value = {}
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+
+        result = await agent.run({"schema": "pma"})
+
+        assert result["attempted_methods"] == []
+        assert result["duration_ms"] == 0
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_403_with_playwright_fallback_lists_both_methods(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """403 response with Playwright fallback lists both methods."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+
+        # Mock Playwright to also fail
+        with patch.object(agent, "_fetch_with_playwright", new_callable=AsyncMock, return_value=None):
+            result = await agent.run({
+                "url": "https://example.com/directory",
+                "association": "PMA"
+            })
+
+        assert result["attempted_methods"] == ["httpx", "playwright"]
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_connection_error_with_playwright_fallback(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Connection error tries playwright as fallback and lists both methods."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=ConnectionError("Connection refused")
+        )
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+
+        with patch.object(agent, "_fetch_with_playwright", new_callable=AsyncMock, return_value=None):
+            result = await agent.run({
+                "url": "https://example.com/directory",
+                "association": "PMA"
+            })
+
+        assert "httpx" in result["attempted_methods"]
+        assert "playwright" in result["attempted_methods"]
+        assert result["success"] is False

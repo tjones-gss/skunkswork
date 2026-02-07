@@ -587,3 +587,185 @@ class TestAgentSpawnerSpawnParallel:
                 found_total = True
         # The log includes total_records as kwarg
         assert mock_log.info.called
+
+
+# =============================================================================
+# TEST PER-TASK ERROR MAPPING (Phase 5)
+# =============================================================================
+
+
+class TestSpawnParallelErrorMapping:
+    """Tests for per-task error mapping in spawn_parallel()."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_error_results_include_task_index(self, mock_logger):
+        """Error results include task_index field."""
+        from agents.base import AgentSpawner
+
+        call_count = 0
+
+        async def fail_second(task):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise RuntimeError("Task 2 failed")
+            return {"success": True, "records_processed": 1}
+
+        mock_agent = MagicMock()
+        mock_agent.execute = fail_second
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+
+        tasks = [
+            {"url": "https://a.com"},
+            {"url": "https://b.com"},
+            {"url": "https://c.com"},
+        ]
+        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        # Find the failed result
+        failed = [r for r in results if not r.get("success")]
+        assert len(failed) == 1
+        assert "task_index" in failed[0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_error_results_include_task_ref_url(self, mock_logger):
+        """Error results include task_ref from url field."""
+        from agents.base import AgentSpawner
+
+        mock_agent = MagicMock()
+        mock_agent.execute = AsyncMock(side_effect=RuntimeError("Failed"))
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+
+        tasks = [{"url": "https://example.com/page1"}]
+        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        assert results[0]["task_ref"] == "https://example.com/page1"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_error_results_include_task_ref_id(self, mock_logger):
+        """Error results use 'id' field when 'url' not present."""
+        from agents.base import AgentSpawner
+
+        mock_agent = MagicMock()
+        mock_agent.execute = AsyncMock(side_effect=RuntimeError("Failed"))
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+
+        tasks = [{"id": "task-abc-123"}]
+        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        assert results[0]["task_ref"] == "task-abc-123"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_error_results_fallback_task_ref(self, mock_logger):
+        """Error results use task_N fallback when no url or id."""
+        from agents.base import AgentSpawner
+
+        mock_agent = MagicMock()
+        mock_agent.execute = AsyncMock(side_effect=RuntimeError("Failed"))
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+
+        tasks = [{"schema": "pma"}]
+        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        assert results[0]["task_ref"] == "task_0"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_mixed_success_failure_preserves_ordering(self, mock_logger):
+        """Mixed results preserve task ordering with error mapping."""
+        from agents.base import AgentSpawner
+
+        call_count = 0
+
+        async def alternating(task):
+            nonlocal call_count
+            call_count += 1
+            if call_count % 2 == 0:
+                raise ValueError("Even tasks fail")
+            return {"success": True, "records_processed": 1, "task_id": task.get("id")}
+
+        mock_agent = MagicMock()
+        mock_agent.execute = alternating
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+
+        tasks = [{"id": f"t{i}", "url": f"https://example.com/{i}"} for i in range(4)]
+        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        assert len(results) == 4
+        # Check that failures have correct task_index
+        for r in results:
+            if not r.get("success"):
+                assert "task_index" in r
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_failed_tasks_pushed_to_dlq(self, mock_logger, tmp_path):
+        """Failed tasks in spawn_parallel are pushed to DLQ."""
+        from agents.base import AgentSpawner, DeadLetterQueue
+
+        mock_agent = MagicMock()
+        mock_agent.execute = AsyncMock(side_effect=RuntimeError("Task failed"))
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+        spawner.dlq = DeadLetterQueue(queue_dir=str(tmp_path / "dlq"))
+
+        tasks = [
+            {"url": "https://a.com"},
+            {"url": "https://b.com"},
+        ]
+        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        # Both should be in DLQ
+        assert spawner.dlq.count() == 2
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_dlq_entries_have_task_index(self, mock_logger, tmp_path):
+        """DLQ entries include task_index in context."""
+        from agents.base import AgentSpawner, DeadLetterQueue
+
+        mock_agent = MagicMock()
+        mock_agent.execute = AsyncMock(side_effect=RuntimeError("Failed"))
+        mock_class = MagicMock(return_value=mock_agent)
+
+        spawner = AgentSpawner()
+        spawner._load_agent_class = MagicMock(return_value=mock_class)
+        spawner.dlq = DeadLetterQueue(queue_dir=str(tmp_path / "dlq"))
+
+        tasks = [{"url": "https://a.com"}, {"url": "https://b.com"}]
+        await spawner.spawn_parallel("extraction.html_parser", tasks)
+
+        entries = spawner.dlq.read_all()
+        indices = [e["context"]["task_index"] for e in entries]
+        assert 0 in indices
+        assert 1 in indices
+
+    @pytest.mark.asyncio
+    @patch("agents.base.StructuredLogger")
+    async def test_spawner_has_dlq_attribute(self, mock_logger):
+        """AgentSpawner has dlq attribute after init."""
+        from agents.base import AgentSpawner
+
+        spawner = AgentSpawner()
+        assert hasattr(spawner, "dlq")

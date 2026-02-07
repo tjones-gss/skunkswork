@@ -6,6 +6,7 @@ Extracts structured company data from HTML pages using CSS/XPath selectors.
 """
 
 import re
+import time
 from datetime import datetime, UTC
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -312,6 +313,36 @@ class DirectoryParserAgent(HTMLParserAgent):
     rather than individual profile pages.
     """
 
+    async def _fetch_with_playwright(self, url: str) -> Optional[str]:
+        """Fetch page using Playwright browser when httpx is blocked by WAF."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            self.log.warning("Playwright not installed, cannot bypass WAF")
+            return None
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    )
+                )
+                response = await page.goto(url, wait_until="networkidle", timeout=30000)
+                if response and response.status == 200:
+                    html = await page.content()
+                    await browser.close()
+                    return html
+                self.log.warning(f"Playwright got HTTP {response.status if response else 'None'} for {url}")
+                await browser.close()
+        except Exception as e:
+            self.log.warning(f"Playwright fetch failed for {url}: {e}")
+
+        return None
+
     async def run(self, task: dict) -> dict:
         """
         Extract all records from directory page(s).
@@ -331,8 +362,11 @@ class DirectoryParserAgent(HTMLParserAgent):
             return {
                 "success": False,
                 "error": "No URL provided",
+                "url": url,
+                "attempted_methods": [],
+                "duration_ms": 0,
                 "records": [],
-                "records_processed": 0
+                "records_processed": 0,
             }
 
         # Load schema
@@ -341,30 +375,65 @@ class DirectoryParserAgent(HTMLParserAgent):
         self.log.info(
             f"Extracting directory from {url}",
             schema=schema_name,
-            association=association
+            association=association,
         )
 
+        start = time.monotonic()
+        attempted_methods = []
+
         try:
+            attempted_methods.append("httpx")
             response = await self.http.get(url, timeout=60)
 
-            if response.status_code != 200:
+            if response.status_code == 200:
+                html = response.text
+            elif response.status_code in (403, 503):
+                # WAF or anti-bot block — fall back to Playwright
+                self.log.info(f"HTTP {response.status_code}, retrying with Playwright: {url}")
+                attempted_methods.append("playwright")
+                html = await self._fetch_with_playwright(url)
+                if not html:
+                    duration_ms = int((time.monotonic() - start) * 1000)
+                    return {
+                        "success": False,
+                        "error": f"HTTP {response.status_code} (Playwright fallback also failed)",
+                        "url": url,
+                        "attempted_methods": attempted_methods,
+                        "duration_ms": duration_ms,
+                        "records": [],
+                        "records_processed": 0,
+                    }
+            else:
+                duration_ms = int((time.monotonic() - start) * 1000)
                 return {
                     "success": False,
                     "error": f"HTTP {response.status_code}",
+                    "url": url,
+                    "attempted_methods": attempted_methods,
+                    "duration_ms": duration_ms,
                     "records": [],
-                    "records_processed": 0
+                    "records_processed": 0,
                 }
 
-            html = response.text
             soup = BeautifulSoup(html, "lxml")
 
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "records": [],
-                "records_processed": 0
-            }
+            # Connection error — try Playwright as fallback
+            self.log.info(f"HTTP request failed ({e}), trying Playwright: {url}")
+            attempted_methods.append("playwright")
+            html = await self._fetch_with_playwright(url)
+            if not html:
+                duration_ms = int((time.monotonic() - start) * 1000)
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "url": url,
+                    "attempted_methods": attempted_methods,
+                    "duration_ms": duration_ms,
+                    "records": [],
+                    "records_processed": 0,
+                }
+            soup = BeautifulSoup(html, "lxml")
 
         # Find list container
         container_selector = schema.get("list_container", "body")
@@ -391,12 +460,16 @@ class DirectoryParserAgent(HTMLParserAgent):
             )
             records = auto_records
 
+        duration_ms = int((time.monotonic() - start) * 1000)
         self.log.info(f"Extracted {len(records)} records from directory")
 
         return {
             "success": True,
             "records": records,
-            "records_processed": len(records)
+            "records_processed": len(records),
+            "url": url,
+            "attempted_methods": attempted_methods,
+            "duration_ms": duration_ms,
         }
 
     def _extract_item(

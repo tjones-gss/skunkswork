@@ -41,6 +41,11 @@ class OrchestratorAgent(BaseAgent):
         self.associations = kwargs.get("associations", [])
         self.dry_run = kwargs.get("dry_run", False)
 
+        # Error threshold: maximum acceptable error rate (0.0-1.0)
+        self.max_error_rate = float(
+            self.agent_config.get("max_extraction_errors", 0.5)
+        )
+
         # State management
         self.state_manager = StateManager()
         self.state: Optional[PipelineState] = None
@@ -664,10 +669,30 @@ class OrchestratorAgent(BaseAgent):
                 }
                 results["success"] = False
 
+        # Compute aggregate metrics
+        associations_failed = sum(
+            1 for r in results["associations"].values() if not r.get("success")
+        )
+        total_attempted = len(associations)
+        aggregate_error_rate = associations_failed / total_attempted if total_attempted else 0
+
+        results["total_errors"] = associations_failed
+        results["error_rate"] = aggregate_error_rate
+        results["associations_failed"] = associations_failed
+
+        # Mark overall failure if aggregate error rate exceeds threshold
+        if aggregate_error_rate > self.max_error_rate:
+            results["success"] = False
+            results["error"] = (
+                f"Aggregate error rate {aggregate_error_rate:.0%} exceeds threshold"
+            )
+
         self.log.info(
             "Extraction phase complete",
             total_records=results["total_records"],
-            associations_processed=len(associations)
+            associations_processed=len(associations),
+            associations_failed=associations_failed,
+            error_rate=f"{aggregate_error_rate:.0%}",
         )
 
         return results
@@ -679,6 +704,13 @@ class OrchestratorAgent(BaseAgent):
         if not config:
             raise ValueError(f"Association {association} not found in configuration")
 
+        extraction_mode = config.get("extraction_mode", "standard")
+
+        # District-based extraction: skip discovery, directly parse each district page
+        if extraction_mode == "district_directories":
+            return await self._extract_district_directories(association, config)
+
+        # Standard extraction flow
         # Step 1: Discover URLs
         self.log.info(f"Mapping {association} site")
 
@@ -767,6 +799,92 @@ class OrchestratorAgent(BaseAgent):
             "association": association,
             "urls_discovered": len(member_urls),
             "records_extracted": len(all_records),
+            "output_path": output_path
+        }
+
+    async def _extract_district_directories(self, association: str, config: dict) -> dict:
+        """
+        Extract members from multiple district directory pages.
+
+        Used for associations like PMA where members are listed on separate
+        per-district pages rather than a single searchable directory.
+        """
+        district_urls = config.get("district_urls", [])
+        schema = config.get("schema", "default")
+
+        if not district_urls:
+            return {
+                "success": False,
+                "error": f"No district_urls configured for {association}",
+                "records_extracted": 0
+            }
+
+        self.log.info(
+            f"Extracting {association} from {len(district_urls)} district pages"
+        )
+
+        all_records = []
+
+        # Process each district page through the DirectoryParser
+        tasks = [
+            {"url": url, "schema": schema, "association": association}
+            for url in district_urls
+        ]
+
+        results = await self.spawner.spawn_parallel(
+            "extraction.directory_parser",
+            tasks,
+            max_concurrent=3  # Conservative to avoid WAF blocks
+        )
+
+        successes = sum(1 for r in results if r.get("success"))
+        failures = len(results) - successes
+        error_rate = failures / len(results) if results else 0
+
+        for result in results:
+            if result.get("success") and result.get("records"):
+                all_records.extend(result["records"])
+
+        if error_rate > self.max_error_rate:
+            self.log.error(
+                f"Error rate {error_rate:.0%} exceeds threshold {self.max_error_rate:.0%}"
+            )
+            return {
+                "success": False,
+                "error": f"Error rate {error_rate:.0%} exceeds threshold",
+                "association": association,
+                "urls_discovered": len(district_urls),
+                "records_extracted": len(all_records),
+                "successes": successes,
+                "failures": failures,
+                "error_rate": error_rate,
+            }
+
+        # Deduplicate by member_id or company_name (members can appear in multiple districts)
+        seen = set()
+        unique_records = []
+        for record in all_records:
+            key = record.get("member_id") or record.get("company_name", "")
+            if key and key not in seen:
+                seen.add(key)
+                unique_records.append(record)
+
+        output_path = f"data/raw/{association}/records_{self.job_id}.jsonl"
+
+        if not self.dry_run:
+            self.save_records(unique_records, output_path)
+
+        self.log.info(
+            f"Extracted {len(unique_records)} unique records from {len(district_urls)} districts "
+            f"({len(all_records)} total before dedup)"
+        )
+
+        return {
+            "success": True,
+            "association": association,
+            "urls_discovered": len(district_urls),
+            "records_extracted": len(unique_records),
+            "records_before_dedup": len(all_records),
             "output_path": output_path
         }
 
@@ -996,7 +1114,13 @@ class OrchestratorAgent(BaseAgent):
 @click.option("--dry-run", is_flag=True, help="Run without saving results")
 @click.option("--job-id", help="Specific job ID (for resume)")
 @click.option("--resume", help="Resume from job ID")
-def main(mode, associations, enrichment, validation, dry_run, job_id, resume):
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    default="INFO",
+    help="Logging level",
+)
+def main(mode, associations, enrichment, validation, dry_run, job_id, resume, log_level):
     """
     NAM Competitive Intelligence Pipeline Orchestrator
 
@@ -1014,13 +1138,16 @@ def main(mode, associations, enrichment, validation, dry_run, job_id, resume):
     if dry_run:
         click.echo("DRY RUN - no data will be saved")
 
+    import logging as _logging
+
     orchestrator = OrchestratorAgent(
         agent_type="orchestrator",
         job_id=job_id,
         mode=mode,
         associations=list(associations),
-        dry_run=dry_run
+        dry_run=dry_run,
     )
+    orchestrator.log.logger.setLevel(getattr(_logging, log_level.upper()))
 
     task = {
         "mode": mode,

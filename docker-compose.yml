@@ -1,0 +1,43 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=postgresql://nam_user:nam_pass@postgres:5432/nam_intel
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nam_intel
+      POSTGRES_USER: nam_user
+      POSTGRES_PASSWORD: nam_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nam_user -d nam_intel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@localhost.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - admin
+
+volumes:
+  pgdata:

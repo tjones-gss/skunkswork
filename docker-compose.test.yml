@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    environment:
+      - DATABASE_URL=postgresql://test_user:test_pass@postgres:5432/test_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["python", "-m", "pytest", "tests/", "-v"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5

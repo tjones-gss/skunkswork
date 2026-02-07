@@ -6,10 +6,9 @@ Tests for the site mapper discovery agent that analyzes association websites
 to find member directories, detect pagination patterns, and estimate member counts.
 """
 
-import pytest
-import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # TEST INITIALIZATION
@@ -910,8 +909,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting query parameter pagination with page param."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -940,8 +940,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting query parameter pagination with offset param."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -970,8 +971,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting query parameter pagination with count/n param."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -999,8 +1001,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting path segment pagination."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1028,8 +1031,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting infinite scroll from data attribute."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1057,8 +1061,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting infinite scroll from next-page data attribute."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1086,8 +1091,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting Load More button pagination."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1116,8 +1122,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting no pagination on single-page directory."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1146,8 +1153,9 @@ class TestSiteMapperAgentDetectPagination:
         """Test detecting pagination from pagination class element."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1189,8 +1197,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test extracting member count from explicit text."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1213,8 +1222,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test extracting count from 'results' text."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1236,8 +1246,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test extracting count from 'total' text."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1259,8 +1270,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test counting member container elements."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1283,8 +1295,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test counting table rows."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1307,8 +1320,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test counting list items."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1331,8 +1345,9 @@ class TestSiteMapperAgentEstimateMembers:
         """Test returning 0 when no count indicators found."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1363,8 +1378,9 @@ class TestSiteMapperAgentCheckAuth:
         """Test detecting auth from login form."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1392,8 +1408,9 @@ class TestSiteMapperAgentCheckAuth:
         """Test detecting auth from text indicators."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
@@ -1419,8 +1436,9 @@ class TestSiteMapperAgentCheckAuth:
         """Test detecting no auth required on public page."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.discovery.site_mapper import SiteMapperAgent
         from bs4 import BeautifulSoup
+
+        from agents.discovery.site_mapper import SiteMapperAgent
 
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 

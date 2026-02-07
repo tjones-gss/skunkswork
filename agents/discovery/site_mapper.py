@@ -7,7 +7,7 @@ and estimate member counts.
 """
 
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 from urllib.robotparser import RobotFileParser
 
 from bs4 import BeautifulSoup
@@ -94,7 +94,7 @@ class SiteMapperAgent(BaseAgent):
             self.log.warning(f"robots.txt blocks access to {directory_url}")
             return {
                 "success": False,
-                "error": f"robots.txt blocks access to directory",
+                "error": "robots.txt blocks access to directory",
                 "records_processed": 0
             }
 
@@ -129,7 +129,7 @@ class SiteMapperAgent(BaseAgent):
         auth_required = self._check_auth_required(soup)
 
         self.log.info(
-            f"Site mapped successfully",
+            "Site mapped successfully",
             directory_url=directory_url,
             pagination_type=pagination.get("type"),
             estimated_members=estimated_members,

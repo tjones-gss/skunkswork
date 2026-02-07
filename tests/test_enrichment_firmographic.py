@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # TEST INITIALIZATION
 # =============================================================================
@@ -1364,7 +1363,7 @@ class TestFirmographicAgentProviderFallback:
         agent = FirmographicAgent(agent_type="enrichment.firmographic")
 
         records = [{"company_name": "Acme", "website": "https://acme.com"}]
-        result = await agent.run({"records": records})
+        await agent.run({"records": records})
 
         # Should only call clearbit (first provider)
         assert mock_http.return_value.get.call_count == 1

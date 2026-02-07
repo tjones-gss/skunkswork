@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # TEST HTML PARSER INITIALIZATION
 # =============================================================================
@@ -980,8 +979,9 @@ class TestHTMLParserSchemaExtends:
         """Extended schema inherits fields from base."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.extraction.html_parser import HTMLParserAgent
         import yaml
+
+        from agents.extraction.html_parser import HTMLParserAgent
 
         # Create schemas directory
         schemas_dir = tmp_path / "schemas"
@@ -1028,8 +1028,9 @@ class TestHTMLParserSchemaExtends:
         """Extended schema overrides base fields."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.extraction.html_parser import HTMLParserAgent
         import yaml
+
+        from agents.extraction.html_parser import HTMLParserAgent
 
         schemas_dir = tmp_path / "schemas"
         schemas_dir.mkdir()
@@ -1070,8 +1071,9 @@ class TestHTMLParserSchemaExtends:
         """Loads schema from YAML file on disk."""
         mock_config.return_value.load.return_value = {}
 
-        from agents.extraction.html_parser import HTMLParserAgent
         import yaml
+
+        from agents.extraction.html_parser import HTMLParserAgent
 
         schemas_dir = tmp_path / "schemas"
         schemas_dir.mkdir()

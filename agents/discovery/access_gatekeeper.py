@@ -8,15 +8,15 @@ identifies paywalls/login requirements.
 """
 
 import re
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 from bs4 import BeautifulSoup
 
 from agents.base import BaseAgent
-from models.ontology import AccessVerdict, Provenance
 from middleware.policy import crawler_only
+from models.ontology import AccessVerdict
 
 
 class AccessGatekeeperAgent(BaseAgent):
@@ -237,7 +237,7 @@ class AccessGatekeeperAgent(BaseAgent):
                         result["sitemaps"].append(sitemap_url)
 
                 self.log.debug(
-                    f"robots.txt parsed",
+                    "robots.txt parsed",
                     allows=result["allows"],
                     crawl_delay=result["crawl_delay"]
                 )
@@ -435,7 +435,7 @@ class BatchAccessGatekeeperAgent(AccessGatekeeperAgent):
                 })
 
         self.log.info(
-            f"Access check complete",
+            "Access check complete",
             total=len(urls),
             allowed=len(allowed),
             blocked=len(blocked)

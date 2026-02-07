@@ -10,8 +10,6 @@ import asyncio
 import os
 import re
 from datetime import datetime
-from typing import Optional
-from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
@@ -114,7 +112,7 @@ class FirmographicAgent(BaseAgent):
         match_rate = matched / len(records) if records else 0
 
         self.log.info(
-            f"Firmographic enrichment complete",
+            "Firmographic enrichment complete",
             matched=matched,
             total=len(records),
             match_rate=f"{match_rate:.1%}"
@@ -127,7 +125,7 @@ class FirmographicAgent(BaseAgent):
             "records_processed": len(records)
         }
 
-    async def _fetch_clearbit(self, domain: str) -> Optional[dict]:
+    async def _fetch_clearbit(self, domain: str) -> dict | None:
         """Fetch from Clearbit API."""
         api_key = os.getenv("CLEARBIT_API_KEY")
         if not api_key:
@@ -168,7 +166,7 @@ class FirmographicAgent(BaseAgent):
 
         return None
 
-    async def _fetch_apollo(self, domain: str) -> Optional[dict]:
+    async def _fetch_apollo(self, domain: str) -> dict | None:
         """Fetch from Apollo API."""
         api_key = os.getenv("APOLLO_API_KEY")
         if not api_key:
@@ -203,7 +201,7 @@ class FirmographicAgent(BaseAgent):
 
         return None
 
-    async def _fetch_zoominfo(self, company_name: str, domain: str = None) -> Optional[dict]:
+    async def _fetch_zoominfo(self, company_name: str, domain: str = None) -> dict | None:
         """Fetch from ZoomInfo API."""
         api_key = os.getenv("ZOOMINFO_API_KEY")
         if not api_key:
@@ -242,7 +240,7 @@ class FirmographicAgent(BaseAgent):
 
         return None
 
-    async def _scrape_website(self, domain: str) -> Optional[dict]:
+    async def _scrape_website(self, domain: str) -> dict | None:
         """Scrape company website for firmographic data."""
         about_paths = ["/about", "/about-us", "/company", "/who-we-are"]
 
@@ -270,7 +268,7 @@ class FirmographicAgent(BaseAgent):
 
         return None
 
-    def _parse_about_page(self, html: str) -> Optional[dict]:
+    def _parse_about_page(self, html: str) -> dict | None:
         """Parse About page for firmographic data."""
         soup = BeautifulSoup(html, "lxml")
         text = soup.get_text()
@@ -332,7 +330,7 @@ class FirmographicAgent(BaseAgent):
 
         return data if data else None
 
-    def _parse_revenue(self, revenue_str: str) -> Optional[int]:
+    def _parse_revenue(self, revenue_str: str) -> int | None:
         """Parse revenue string to integer."""
         if not revenue_str:
             return None
@@ -354,7 +352,7 @@ class FirmographicAgent(BaseAgent):
 
         return None
 
-    def _build_linkedin_url(self, handle: str) -> Optional[str]:
+    def _build_linkedin_url(self, handle: str) -> str | None:
         """Build LinkedIn URL from handle."""
         if handle:
             return f"https://linkedin.com/company/{handle}"

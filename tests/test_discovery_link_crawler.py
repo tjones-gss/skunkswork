@@ -7,10 +7,10 @@ to discover all member profile URLs following pagination.
 """
 
 import json
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # TEST INITIALIZATION
@@ -1646,7 +1646,7 @@ class TestLinkCrawlerAgentSaveUrls:
         assert Path(output_path).exists()
 
         # Verify content
-        with open(output_path, "r") as f:
+        with open(output_path) as f:
             lines = f.readlines()
 
         assert len(lines) == 2

@@ -7,9 +7,8 @@ Extracts member data from PDF directories and annual reports.
 
 import io
 import re
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from agents.base import BaseAgent
 
@@ -170,7 +169,7 @@ class PDFParserAgent(BaseAgent):
 
         return records
 
-    def _normalize_header(self, header: str) -> Optional[str]:
+    def _normalize_header(self, header: str) -> str | None:
         """Normalize table header to field name."""
         if not header:
             return None
@@ -234,7 +233,7 @@ class PDFParserAgent(BaseAgent):
 
         return records
 
-    def _parse_text_block(self, block: str, association: str) -> Optional[dict]:
+    def _parse_text_block(self, block: str, association: str) -> dict | None:
         """Parse a text block that might be a company entry."""
         lines = block.strip().split('\n')
 

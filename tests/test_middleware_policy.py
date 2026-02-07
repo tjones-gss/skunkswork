@@ -5,14 +5,11 @@ Tests decorator-based policy enforcement: provenance, crawler-only,
 enrichment HTTP, JSON validation, auth detection, ontology labels.
 """
 
-import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from middleware.policy import (
-    AUTH_INDICATORS,
-    CRAWLER_AGENTS,
     ENRICHMENT_AGENTS,
     PolicyChecker,
     PolicyViolation,
@@ -25,7 +22,6 @@ from middleware.policy import (
     ontology_labels_required,
     validate_json_output,
 )
-
 
 # =============================================================================
 # ENRICHMENT_AGENTS SET

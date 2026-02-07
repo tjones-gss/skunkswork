@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # TEST AGENT REGISTRY
 # =============================================================================
@@ -121,7 +120,7 @@ class TestAgentSpawnerInitialization:
         """Spawner creates logger with correct parameters."""
         from agents.base import AgentSpawner
 
-        spawner = AgentSpawner(job_id="logger-test")
+        AgentSpawner(job_id="logger-test")
 
         mock_logger.assert_called_with("spawner", "logger-test")
 
@@ -581,10 +580,9 @@ class TestAgentSpawnerSpawnParallel:
 
         # Last info call should include total_records=30
         calls = mock_log.info.call_args_list
-        found_total = False
         for call in calls:
             if "total_records" in str(call):
-                found_total = True
+                pass
         # The log includes total_records as kwarg
         assert mock_log.info.called
 
@@ -734,7 +732,7 @@ class TestSpawnParallelErrorMapping:
             {"url": "https://a.com"},
             {"url": "https://b.com"},
         ]
-        results = await spawner.spawn_parallel("extraction.html_parser", tasks)
+        await spawner.spawn_parallel("extraction.html_parser", tasks)
 
         # Both should be in DLQ
         assert spawner.dlq.count() == 2

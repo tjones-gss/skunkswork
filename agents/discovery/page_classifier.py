@@ -7,15 +7,14 @@ the appropriate extraction strategy.
 """
 
 import re
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
 from agents.base import BaseAgent
-from models.ontology import PageType, PageClassification
-from middleware.policy import validate_json_output, ontology_labels_required
+from middleware.policy import validate_json_output
+from models.ontology import PageClassification, PageType
 
 
 class PageClassifierAgent(BaseAgent):
@@ -219,7 +218,7 @@ class PageClassifierAgent(BaseAgent):
         )
 
         self.log.info(
-            f"Classified page",
+            "Classified page",
             url=url,
             page_type=page_type.value,
             confidence=confidence,
@@ -330,8 +329,8 @@ class PageClassifierAgent(BaseAgent):
         scores = {}
 
         # Check for list structures
-        tables = soup.find_all("table")
-        lists = soup.find_all(["ul", "ol"])
+        soup.find_all("table")
+        soup.find_all(["ul", "ol"])
         list_items = soup.find_all("li")
 
         # Many list items suggests directory/list page
@@ -385,7 +384,7 @@ class PageClassifierAgent(BaseAgent):
     def _combine_classifications(
         self,
         url_class: dict,
-        content_class: Optional[dict]
+        content_class: dict | None
     ) -> tuple:
         """Combine URL and content classifications."""
         signals = {
@@ -461,7 +460,7 @@ class BatchPageClassifierAgent(PageClassifierAgent):
                 type_counts[page_type] = type_counts.get(page_type, 0) + 1
 
         self.log.info(
-            f"Classification complete",
+            "Classification complete",
             total=len(pages),
             type_distribution=type_counts
         )

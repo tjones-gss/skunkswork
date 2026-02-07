@@ -5,12 +5,11 @@ NAM Intelligence Pipeline
 Crawls member directory pages following pagination to discover all member URLs.
 """
 
-import asyncio
 import json
 import re
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urljoin, urlparse, parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -58,7 +57,7 @@ class LinkCrawlerAgent(BaseAgent):
         association = task.get("association", "unknown")
 
         self.log.info(
-            f"Starting crawl",
+            "Starting crawl",
             entry_url=entry_url,
             pagination_type=pagination.get("type"),
             association=association
@@ -104,7 +103,7 @@ class LinkCrawlerAgent(BaseAgent):
         self._save_urls(member_urls, output_path)
 
         self.log.info(
-            f"Crawl complete",
+            "Crawl complete",
             total_urls=len(member_urls),
             pages_crawled=pages_crawled,
             association=association

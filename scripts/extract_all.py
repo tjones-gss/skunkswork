@@ -7,9 +7,7 @@ Provides a simplified interface to run the complete pipeline for all association
 
 import argparse
 import asyncio
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Add parent directory to path
@@ -35,14 +33,14 @@ def print_summary(result: dict):
     print("=" * 60)
 
     if result.get("success"):
-        print(f"✓ Status: SUCCESS")
+        print("✓ Status: SUCCESS")
     else:
-        print(f"✗ Status: FAILED")
+        print("✗ Status: FAILED")
         if result.get("error"):
             print(f"  Error: {result['error']}")
 
     if "phases" in result:
-        print(f"\nPhase Results:")
+        print("\nPhase Results:")
         for phase, phase_result in result["phases"].items():
             status = "✓" if phase_result.get("success") else "✗"
             records = phase_result.get("records_processed", phase_result.get("total_records", "N/A"))
@@ -177,9 +175,9 @@ Examples:
 
     # Check for required packages
     try:
-        import httpx
-        import yaml
-        from bs4 import BeautifulSoup
+        import httpx  # noqa: F401
+        import yaml  # noqa: F401
+        from bs4 import BeautifulSoup  # noqa: F401
     except ImportError as e:
         print(f"Error: Missing required package: {e}")
         print("Run: pip install -r requirements.txt")

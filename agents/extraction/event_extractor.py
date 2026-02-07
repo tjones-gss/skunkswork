@@ -7,15 +7,13 @@ Handles conferences, trade shows, webinars, and member events.
 """
 
 import re
-from datetime import datetime
-from typing import Optional
 
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 
 from agents.base import BaseAgent
+from middleware.policy import auth_pages_flagged, enforce_provenance, validate_json_output
 from models.ontology import Event, EventType, Provenance
-from middleware.policy import enforce_provenance, validate_json_output, auth_pages_flagged
 
 
 class EventExtractorAgent(BaseAgent):
@@ -159,7 +157,7 @@ class EventExtractorAgent(BaseAgent):
         soup: BeautifulSoup,
         url: str,
         provenance: Provenance
-    ) -> Optional[Event]:
+    ) -> Event | None:
         """Extract a single event from a detail page."""
         try:
             # Extract title
@@ -265,7 +263,7 @@ class EventExtractorAgent(BaseAgent):
         container,
         base_url: str,
         provenance: Provenance
-    ) -> Optional[Event]:
+    ) -> Event | None:
         """Extract event from a container element."""
         # Extract title
         title_elem = container.find(["h1", "h2", "h3", "h4", "a"], class_=re.compile(r'title|name', re.I))
@@ -318,7 +316,7 @@ class EventExtractorAgent(BaseAgent):
             provenance=[provenance]
         )
 
-    def _extract_title(self, soup: BeautifulSoup) -> Optional[str]:
+    def _extract_title(self, soup: BeautifulSoup) -> str | None:
         """Extract event title from page."""
         # Try structured data first
         json_ld = soup.find("script", type="application/ld+json")
@@ -328,7 +326,7 @@ class EventExtractorAgent(BaseAgent):
                 data = json.loads(json_ld.string)
                 if isinstance(data, dict) and data.get("name"):
                     return data["name"]
-            except:
+            except Exception:
                 pass
 
         # Try meta tags
@@ -366,7 +364,7 @@ class EventExtractorAgent(BaseAgent):
                             date_parser.parse(start) if start else None,
                             date_parser.parse(end) if end else None
                         )
-            except:
+            except Exception:
                 pass
 
         # Try meta tags
@@ -378,7 +376,7 @@ class EventExtractorAgent(BaseAgent):
                     end_meta = soup.find("meta", property=prop.replace("start", "end"))
                     end = date_parser.parse(end_meta["content"]) if end_meta else None
                     return start, end
-                except:
+                except Exception:
                     pass
 
         # Try date elements
@@ -414,7 +412,7 @@ class EventExtractorAgent(BaseAgent):
                         start = date_parser.parse(f"{start_month} {start_day}, {year}")
                         end = date_parser.parse(f"{end_month} {end_day}, {year}")
                         return start, end
-                except:
+                except Exception:
                     pass
 
         # Try single date patterns
@@ -431,7 +429,7 @@ class EventExtractorAgent(BaseAgent):
                         return dates[0], dates[1]
                     elif len(dates) == 1:
                         return dates[0], None
-                except:
+                except Exception:
                     pass
 
         return None, None
@@ -455,7 +453,7 @@ class EventExtractorAgent(BaseAgent):
                             address.get("addressCountry"),
                             "virtual" in str(location).lower()
                         )
-            except:
+            except Exception:
                 pass
 
         # Try location elements
@@ -492,7 +490,7 @@ class EventExtractorAgent(BaseAgent):
 
         return text if len(text) < 100 else None, None, None, None, is_virtual
 
-    def _extract_description(self, soup: BeautifulSoup) -> Optional[str]:
+    def _extract_description(self, soup: BeautifulSoup) -> str | None:
         """Extract event description."""
         # Try meta description
         meta = soup.find("meta", attrs={"name": "description"})
@@ -513,7 +511,7 @@ class EventExtractorAgent(BaseAgent):
 
         return None
 
-    def _extract_registration_url(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
+    def _extract_registration_url(self, soup: BeautifulSoup, base_url: str) -> str | None:
         """Extract registration URL."""
         patterns = ['register', 'sign up', 'rsvp', 'attend', 'buy ticket']
 

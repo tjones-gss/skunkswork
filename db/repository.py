@@ -7,27 +7,21 @@ All methods accept an AsyncSession and are designed for use within a
 ``DatabasePool.session()`` context manager.
 """
 
-from datetime import datetime, UTC
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import (
-    AssociationMembershipModel,
     CompanyModel,
     CompetitorSignalModel,
     ContactModel,
-    DuplicateGroupModel,
-    EntityRelationshipModel,
     EventModel,
     EventParticipantModel,
     ExtractionJobModel,
     QualityAuditLogModel,
-    SourceBaselineModel,
-    URLQueueModel,
 )
-
 
 # ---------------------------------------------------------------------------
 # Company Repository
@@ -37,18 +31,18 @@ class CompanyRepository:
     """CRUD operations for the companies table."""
 
     @staticmethod
-    async def get(session: AsyncSession, company_id: str) -> Optional[CompanyModel]:
+    async def get(session: AsyncSession, company_id: str) -> CompanyModel | None:
         return await session.get(CompanyModel, company_id)
 
     @staticmethod
-    async def find_by_domain(session: AsyncSession, domain: str) -> Optional[CompanyModel]:
+    async def find_by_domain(session: AsyncSession, domain: str) -> CompanyModel | None:
         result = await session.execute(
             select(CompanyModel).where(CompanyModel.domain == domain)
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def find_by_name(session: AsyncSession, name: str) -> Optional[CompanyModel]:
+    async def find_by_name(session: AsyncSession, name: str) -> CompanyModel | None:
         result = await session.execute(
             select(CompanyModel).where(CompanyModel.canonical_name == name)
         )
@@ -58,10 +52,10 @@ class CompanyRepository:
     async def search(
         session: AsyncSession,
         *,
-        state: Optional[str] = None,
-        industry: Optional[str] = None,
-        erp_system: Optional[str] = None,
-        min_quality: Optional[int] = None,
+        state: str | None = None,
+        industry: str | None = None,
+        erp_system: str | None = None,
+        min_quality: int | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> Sequence[CompanyModel]:
@@ -129,7 +123,7 @@ class ContactRepository:
     """CRUD operations for the contacts table."""
 
     @staticmethod
-    async def get(session: AsyncSession, contact_id: str) -> Optional[ContactModel]:
+    async def get(session: AsyncSession, contact_id: str) -> ContactModel | None:
         return await session.get(ContactModel, contact_id)
 
     @staticmethod
@@ -142,7 +136,7 @@ class ContactRepository:
         return result.scalars().all()
 
     @staticmethod
-    async def find_by_email(session: AsyncSession, email: str) -> Optional[ContactModel]:
+    async def find_by_email(session: AsyncSession, email: str) -> ContactModel | None:
         result = await session.execute(
             select(ContactModel).where(ContactModel.email == email)
         )
@@ -191,7 +185,7 @@ class ExtractionJobRepository:
     """CRUD operations for the extraction_jobs table."""
 
     @staticmethod
-    async def get(session: AsyncSession, job_id: str) -> Optional[ExtractionJobModel]:
+    async def get(session: AsyncSession, job_id: str) -> ExtractionJobModel | None:
         return await session.get(ExtractionJobModel, job_id)
 
     @staticmethod
@@ -205,12 +199,12 @@ class ExtractionJobRepository:
         session: AsyncSession,
         job_id: str,
         *,
-        processed_items: Optional[int] = None,
-        created_items: Optional[int] = None,
-        updated_items: Optional[int] = None,
-        failed_items: Optional[int] = None,
-        skipped_items: Optional[int] = None,
-    ) -> Optional[ExtractionJobModel]:
+        processed_items: int | None = None,
+        created_items: int | None = None,
+        updated_items: int | None = None,
+        failed_items: int | None = None,
+        skipped_items: int | None = None,
+    ) -> ExtractionJobModel | None:
         job = await session.get(ExtractionJobModel, job_id)
         if not job:
             return None
@@ -230,7 +224,7 @@ class ExtractionJobRepository:
     @staticmethod
     async def complete(
         session: AsyncSession, job_id: str, *, status: str = "completed"
-    ) -> Optional[ExtractionJobModel]:
+    ) -> ExtractionJobModel | None:
         job = await session.get(ExtractionJobModel, job_id)
         if not job:
             return None
@@ -302,7 +296,7 @@ class EventRepository:
     """CRUD operations for the events table."""
 
     @staticmethod
-    async def get(session: AsyncSession, event_id: str) -> Optional[EventModel]:
+    async def get(session: AsyncSession, event_id: str) -> EventModel | None:
         return await session.get(EventModel, event_id)
 
     @staticmethod

@@ -7,9 +7,6 @@ Fetches data from external APIs (Clearbit, BuiltWith, Apollo, ZoomInfo, etc.)
 
 import os
 import re
-from datetime import datetime
-from typing import Optional
-from urllib.parse import urlparse
 
 from agents.base import BaseAgent
 
@@ -115,7 +112,7 @@ class APIClientAgent(BaseAgent):
             "records_processed": 1 if data else 0
         }
 
-    async def _fetch_clearbit(self, domain: str) -> Optional[dict]:
+    async def _fetch_clearbit(self, domain: str) -> dict | None:
         """Fetch company data from Clearbit API."""
         api_key = os.getenv("CLEARBIT_API_KEY")
 
@@ -161,7 +158,7 @@ class APIClientAgent(BaseAgent):
                 self.log.error(f"Clearbit error: {e}")
             raise
 
-    async def _fetch_builtwith(self, domain: str) -> Optional[dict]:
+    async def _fetch_builtwith(self, domain: str) -> dict | None:
         """Fetch technology stack from BuiltWith API."""
         api_key = os.getenv("BUILTWITH_API_KEY")
 
@@ -214,7 +211,7 @@ class APIClientAgent(BaseAgent):
         self,
         domain: str = None,
         company_name: str = None
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Fetch data from Apollo API."""
         api_key = os.getenv("APOLLO_API_KEY")
 
@@ -255,7 +252,7 @@ class APIClientAgent(BaseAgent):
         self,
         company_name: str,
         domain: str = None
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Fetch data from ZoomInfo API."""
         api_key = os.getenv("ZOOMINFO_API_KEY")
 
@@ -295,7 +292,7 @@ class APIClientAgent(BaseAgent):
 
         return None
 
-    def _parse_revenue(self, revenue_str: str) -> Optional[int]:
+    def _parse_revenue(self, revenue_str: str) -> int | None:
         """Parse revenue string to integer."""
         if not revenue_str:
             return None
@@ -318,7 +315,7 @@ class APIClientAgent(BaseAgent):
 
         return None
 
-    def _build_linkedin_url(self, handle: str) -> Optional[str]:
+    def _build_linkedin_url(self, handle: str) -> str | None:
         """Build LinkedIn URL from handle."""
         if handle:
             return f"https://linkedin.com/company/{handle}"

@@ -5,12 +5,9 @@ NAM Intelligence Pipeline
 Integration tests for pipeline phase transitions, state management, and orchestration.
 """
 
-import json
-from datetime import datetime, UTC
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
 
 import pytest
-
 
 # =============================================================================
 # TEST: Pipeline Phase Transitions
@@ -58,7 +55,7 @@ class TestPipelinePhaseTransitions:
 
     def test_done_is_terminal(self, fresh_pipeline_state):
         """DONE cannot transition to any other phase."""
-        from state.machine import PipelinePhase, PHASE_TRANSITIONS
+        from state.machine import PipelinePhase
 
         # Force to DONE state
         fresh_pipeline_state.current_phase = PipelinePhase.DONE
@@ -107,7 +104,7 @@ class TestPipelinePhaseTransitions:
 
     def test_any_phase_can_fail(self, fresh_pipeline_state):
         """Any phase (except terminal) can transition to FAILED."""
-        from state.machine import PipelinePhase, PHASE_TRANSITIONS
+        from state.machine import PHASE_TRANSITIONS, PipelinePhase
 
         for phase, valid_transitions in PHASE_TRANSITIONS.items():
             if phase not in [PipelinePhase.DONE, PipelinePhase.FAILED]:
@@ -154,7 +151,7 @@ class TestPipelinePhaseTransitions:
 
     def test_export_can_go_to_done_or_monitor(self, fresh_pipeline_state):
         """EXPORT can transition to either DONE or MONITOR."""
-        from state.machine import PipelinePhase, PHASE_TRANSITIONS
+        from state.machine import PHASE_TRANSITIONS, PipelinePhase
 
         valid = PHASE_TRANSITIONS[PipelinePhase.EXPORT]
 
@@ -403,8 +400,9 @@ class TestStateManagerPersistence:
 
     def test_multiple_checkpoints(self, state_manager, fresh_pipeline_state):
         """Multiple checkpoints can be created."""
-        from state.machine import PipelinePhase
         import time
+
+        from state.machine import PipelinePhase
 
         fresh_pipeline_state.transition_to(PipelinePhase.GATEKEEPER)
         state_manager.checkpoint(fresh_pipeline_state)
@@ -421,9 +419,9 @@ class TestStateManagerPersistence:
         """list_jobs returns jobs sorted by updated_at descending."""
         import time
 
-        state1 = state_manager.create_state(["PMA"], job_id="older-job")
+        state_manager.create_state(["PMA"], job_id="older-job")
         time.sleep(0.01)
-        state2 = state_manager.create_state(["NEMA"], job_id="newer-job")
+        state_manager.create_state(["NEMA"], job_id="newer-job")
 
         jobs = state_manager.list_jobs()
 

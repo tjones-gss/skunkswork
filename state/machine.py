@@ -22,18 +22,17 @@ State Buckets:
 
 import json
 import logging
-from datetime import datetime, UTC
-from enum import Enum
-from pathlib import Path
-from typing import Any, Optional
-from pydantic import BaseModel, Field
 import uuid
+from datetime import UTC, datetime
+from enum import StrEnum
+from pathlib import Path
 
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
-class PipelinePhase(str, Enum):
+class PipelinePhase(StrEnum):
     """Pipeline execution phases."""
 
     INIT = "INIT"
@@ -75,9 +74,9 @@ class QueueItem(BaseModel):
     url: str
     priority: int = Field(default=0)
     depth: int = Field(default=0)
-    source_url: Optional[str] = None
-    association: Optional[str] = None
-    page_type_hint: Optional[str] = None
+    source_url: str | None = None
+    association: str | None = None
+    page_type_hint: str | None = None
     added_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -87,7 +86,7 @@ class PageSnapshot(BaseModel):
     url: str
     html_hash: str
     content_path: str  # Path to stored HTML file
-    page_type: Optional[str] = None
+    page_type: str | None = None
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     status_code: int = Field(default=200)
 
@@ -99,7 +98,7 @@ class ErrorRecord(BaseModel):
     agent: str
     error_type: str
     error_message: str
-    url: Optional[str] = None
+    url: str | None = None
     context: dict = Field(default_factory=dict)
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -117,7 +116,7 @@ class PipelineState(BaseModel):
 
     # Current phase
     current_phase: PipelinePhase = Field(default=PipelinePhase.INIT)
-    phase_started_at: Optional[datetime] = None
+    phase_started_at: datetime | None = None
 
     # Data buckets (from state_schema.json)
     crawl_queue: list[dict] = Field(default_factory=list)
@@ -145,7 +144,7 @@ class PipelineState(BaseModel):
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
     # Phase history
     phase_history: list[dict] = Field(default_factory=list)
@@ -208,7 +207,7 @@ class PipelineState(BaseModel):
         self.total_urls_discovered += 1
         self.updated_at = datetime.now(UTC)
 
-    def get_next_url(self) -> Optional[dict]:
+    def get_next_url(self) -> dict | None:
         """Get next URL from queue (highest priority first)."""
         if not self.crawl_queue:
             return None
@@ -346,7 +345,7 @@ class StateManager:
 
         logger.debug(f"Saved state to {path}")
 
-    def load_state(self, job_id: str) -> Optional[PipelineState]:
+    def load_state(self, job_id: str) -> PipelineState | None:
         """Load state from disk."""
         path = self._get_state_path(job_id)
 
@@ -354,7 +353,7 @@ class StateManager:
             logger.warning(f"State file not found: {path}")
             return None
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         state = PipelineState(**data)
@@ -392,7 +391,7 @@ class StateManager:
             f"at phase {state.current_phase}"
         )
 
-    def get_latest_checkpoint(self, job_id: str) -> Optional[dict]:
+    def get_latest_checkpoint(self, job_id: str) -> dict | None:
         """Get the most recent checkpoint for a job."""
         checkpoints = list(self.state_dir.glob(f"{job_id}.*.checkpoint.json"))
 
@@ -402,7 +401,7 @@ class StateManager:
         # Sort by modification time
         latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
 
-        with open(latest, "r", encoding="utf-8") as f:
+        with open(latest, encoding="utf-8") as f:
             return json.load(f)
 
     def list_jobs(self, include_completed: bool = False) -> list[dict]:
@@ -411,7 +410,7 @@ class StateManager:
 
         for path in self.state_dir.glob("*.state.json"):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     data = json.load(f)
 
                 job_info = {

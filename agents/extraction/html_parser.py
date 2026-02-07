@@ -7,15 +7,14 @@ Extracts structured company data from HTML pages using CSS/XPath selectors.
 
 import re
 import time
-from datetime import datetime, UTC
-from typing import Any, Optional
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import yaml
 from bs4 import BeautifulSoup
 
 from agents.base import BaseAgent
-from skills.common.SKILL import STATE_CODES, apply_parser
+from skills.common.SKILL import apply_parser
 
 
 class HTMLParserAgent(BaseAgent):
@@ -119,7 +118,7 @@ class HTMLParserAgent(BaseAgent):
             schema_path = self.config_path / "schemas" / f"{schema_name}.yaml"
 
             if schema_path.exists():
-                with open(schema_path, "r", encoding="utf-8") as f:
+                with open(schema_path, encoding="utf-8") as f:
                     schema_config = yaml.safe_load(f)
 
                 # Get the schema definition
@@ -148,7 +147,7 @@ class HTMLParserAgent(BaseAgent):
         url: str,
         schema: dict,
         association: str
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Extract data from a single URL."""
         try:
             response = await self.http.get(url, timeout=30)
@@ -216,7 +215,7 @@ class HTMLParserAgent(BaseAgent):
 
         return record
 
-    def _extract_field(self, soup: BeautifulSoup, config: dict) -> Optional[str]:
+    def _extract_field(self, soup: BeautifulSoup, config: dict) -> str | None:
         """Extract field value using selectors."""
         selectors = config.get("selectors", [])
 
@@ -242,7 +241,7 @@ class HTMLParserAgent(BaseAgent):
         soup: BeautifulSoup,
         selector: str,
         config: dict
-    ) -> Optional[str]:
+    ) -> str | None:
         """Extract using CSS selector."""
         element = soup.select_one(selector)
 
@@ -265,7 +264,7 @@ class HTMLParserAgent(BaseAgent):
         soup: BeautifulSoup,
         xpath: str,
         config: dict
-    ) -> Optional[str]:
+    ) -> str | None:
         """Extract using XPath selector."""
         try:
             from lxml import etree
@@ -313,7 +312,7 @@ class DirectoryParserAgent(HTMLParserAgent):
     rather than individual profile pages.
     """
 
-    async def _fetch_with_playwright(self, url: str) -> Optional[str]:
+    async def _fetch_with_playwright(self, url: str) -> str | None:
         """Fetch page using Playwright browser when httpx is blocked by WAF."""
         try:
             from playwright.async_api import async_playwright
@@ -478,7 +477,7 @@ class DirectoryParserAgent(HTMLParserAgent):
         schema: dict,
         association: str,
         source_url: str
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Extract record from a single list item."""
         record = {
             "source_url": source_url,

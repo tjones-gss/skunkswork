@@ -5,13 +5,11 @@ NAM Intelligence Pipeline
 Detects and merges duplicate company records.
 """
 
-import re
 from collections import defaultdict
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from agents.base import BaseAgent
-from skills.common.SKILL import normalize_company_name, extract_domain
+from skills.common.SKILL import extract_domain, normalize_company_name
 
 
 class DedupeAgent(BaseAgent):
@@ -139,7 +137,7 @@ class DedupeAgent(BaseAgent):
                 merged_records.append(record)
 
         self.log.info(
-            f"Deduplication complete",
+            "Deduplication complete",
             original_count=len(records),
             final_count=len(merged_records),
             duplicates_merged=len(records) - len(merged_records),

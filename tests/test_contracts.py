@@ -6,11 +6,9 @@ Tests for contracts/validator.py - JSON Schema validation for agent I/O contract
 """
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # =============================================================================
 # TEST: ContractValidator Initialization
@@ -22,7 +20,7 @@ class TestContractValidatorInitialization:
 
     def test_default_contracts_dir(self, project_root):
         """Validator uses default contracts directory."""
-        from contracts.validator import ContractValidator, CONTRACTS_DIR
+        from contracts.validator import CONTRACTS_DIR, ContractValidator
 
         validator = ContractValidator()
         assert validator.contracts_dir == CONTRACTS_DIR
@@ -517,7 +515,7 @@ class TestValidateContractDecorators:
     @pytest.mark.asyncio
     async def test_strict_decorator_raises_on_invalid_input(self):
         """validate_contract_strict raises on invalid input."""
-        from contracts.validator import validate_contract_strict, ContractValidationError
+        from contracts.validator import ContractValidationError, validate_contract_strict
 
         class MockAgent:
             agent_type = "discovery.access_gatekeeper"
@@ -534,7 +532,7 @@ class TestValidateContractDecorators:
     @pytest.mark.asyncio
     async def test_strict_decorator_raises_on_invalid_output(self):
         """validate_contract_strict raises on invalid output."""
-        from contracts.validator import validate_contract_strict, ContractValidationError
+        from contracts.validator import ContractValidationError, validate_contract_strict
 
         class MockAgent:
             agent_type = "discovery.access_gatekeeper"
@@ -672,8 +670,8 @@ class TestGlobalValidator:
 
     def test_get_validator_returns_singleton(self):
         """get_validator returns the same instance."""
-        from contracts.validator import get_validator
         import contracts.validator as validator_module
+        from contracts.validator import get_validator
 
         # Reset for clean test
         validator_module._validator = None
@@ -685,8 +683,8 @@ class TestGlobalValidator:
 
     def test_get_validator_creates_instance(self):
         """get_validator creates ContractValidator if none exists."""
-        from contracts.validator import get_validator, ContractValidator
         import contracts.validator as validator_module
+        from contracts.validator import ContractValidator, get_validator
 
         # Reset for clean test
         validator_module._validator = None
@@ -795,7 +793,6 @@ class TestContractValidatorCLI:
     def test_main_missing_schema_argument(self, tmp_path, capsys):
         """Test that missing --schema argument exits with error."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "data.json"
         test_file.write_text('{"company_name": "Test"}')
@@ -811,7 +808,6 @@ class TestContractValidatorCLI:
     def test_main_missing_file_argument(self, capsys):
         """Test that missing --file argument exits with error."""
         import sys
-        from unittest.mock import patch
 
         with patch.object(sys, 'argv', ['validator.py', '--schema', 'core/company']):
             with pytest.raises(SystemExit) as exc_info:
@@ -823,7 +819,6 @@ class TestContractValidatorCLI:
     def test_main_strict_flag_parsed(self, tmp_path, capsys):
         """Test that --strict flag is recognized."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "valid.json"
         test_file.write_text('{"company_name": "Acme Corp"}')
@@ -848,7 +843,6 @@ class TestContractValidatorCLI:
     def test_main_file_not_found_exits_1(self, capsys):
         """Test that FileNotFoundError causes exit(1)."""
         import sys
-        from unittest.mock import patch
 
         with patch.object(sys, 'argv', [
             'validator.py',
@@ -866,7 +860,6 @@ class TestContractValidatorCLI:
     def test_main_invalid_json_exits_1(self, tmp_path, capsys):
         """Test that invalid JSON causes exit(1)."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "invalid.json"
         test_file.write_text('{not valid json}')
@@ -887,7 +880,6 @@ class TestContractValidatorCLI:
     def test_main_file_error_message_printed(self, tmp_path, capsys):
         """Test that file error message is printed to stdout."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "bad.json"
         test_file.write_text('{"incomplete":')
@@ -911,7 +903,6 @@ class TestContractValidatorCLI:
     def test_main_valid_data_exits_0(self, tmp_path, capsys):
         """Test that valid data causes exit(0)."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "company.json"
         test_file.write_text('{"company_name": "Acme Corp"}')
@@ -930,7 +921,6 @@ class TestContractValidatorCLI:
     def test_main_success_message_printed(self, tmp_path, capsys):
         """Test that 'PASSED' is printed on success."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "company.json"
         test_file.write_text('{"company_name": "Test Company"}')
@@ -950,7 +940,6 @@ class TestContractValidatorCLI:
     def test_main_valid_strict_exits_0(self, tmp_path, capsys):
         """Test that valid data in strict mode also exits 0."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "valid_strict.json"
         test_file.write_text('{"company_name": "Test Corp"}')
@@ -976,7 +965,6 @@ class TestContractValidatorCLI:
     def test_main_invalid_data_nonstrict_exits_0(self, tmp_path, capsys):
         """Test that invalid data in non-strict mode exits 0."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "invalid_company.json"
         # Missing required company_name
@@ -997,7 +985,6 @@ class TestContractValidatorCLI:
     def test_main_failure_message_printed(self, tmp_path, capsys):
         """Test that 'FAILED' is printed on validation failure."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "bad_company.json"
         test_file.write_text('{"domain": "test.com"}')
@@ -1017,7 +1004,6 @@ class TestContractValidatorCLI:
     def test_main_errors_listed(self, tmp_path, capsys):
         """Test that individual errors are printed."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "errors_company.json"
         test_file.write_text('{"domain": "test.com"}')
@@ -1039,7 +1025,6 @@ class TestContractValidatorCLI:
     def test_main_nonstrict_is_default(self, tmp_path, capsys):
         """Test that non-strict mode is the default behavior."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "default_company.json"
         test_file.write_text('{}')  # Empty object, missing company_name
@@ -1063,7 +1048,6 @@ class TestContractValidatorCLI:
     def test_main_invalid_data_strict_exits_1(self, tmp_path, capsys):
         """Test that invalid data in strict mode exits 1."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "strict_invalid.json"
         test_file.write_text('{"domain": "test.com"}')
@@ -1083,7 +1067,6 @@ class TestContractValidatorCLI:
     def test_main_strict_error_output(self, tmp_path, capsys):
         """Test that error details are shown in strict mode."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "strict_error.json"
         test_file.write_text('{"invalid_field": "value"}')
@@ -1105,7 +1088,6 @@ class TestContractValidatorCLI:
     def test_main_contract_validation_error_caught(self, tmp_path, capsys):
         """Test that ContractValidationError is handled properly in strict mode."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "contract_error.json"
         test_file.write_text('{"company_name": "Test", "quality_score": 150}')  # > max 100
@@ -1129,7 +1111,6 @@ class TestContractValidatorCLI:
     def test_main_schema_not_found(self, tmp_path, capsys):
         """Test that missing schema causes exit(1)."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "any.json"
         test_file.write_text('{"data": "value"}')
@@ -1148,7 +1129,6 @@ class TestContractValidatorCLI:
     def test_main_empty_json_object(self, tmp_path, capsys):
         """Test that empty JSON object is processed."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "empty.json"
         test_file.write_text('{}')
@@ -1170,7 +1150,6 @@ class TestContractValidatorCLI:
     def test_main_empty_json_array(self, tmp_path, capsys):
         """Test that empty JSON array is processed."""
         import sys
-        from unittest.mock import patch
 
         test_file = tmp_path / "empty_array.json"
         test_file.write_text('[]')
@@ -1190,7 +1169,6 @@ class TestContractValidatorCLI:
     def test_main_unexpected_exception_exits_1(self, tmp_path, capsys):
         """Test that unexpected exceptions cause exit(1)."""
         import sys
-        from unittest.mock import patch, MagicMock
 
         test_file = tmp_path / "exception.json"
         test_file.write_text('{"company_name": "Test"}')
@@ -1214,7 +1192,6 @@ class TestContractValidatorCLI:
     def test_main_help_flag(self, capsys):
         """Test that --help works."""
         import sys
-        from unittest.mock import patch
 
         with patch.object(sys, 'argv', ['validator.py', '--help']):
             with pytest.raises(SystemExit) as exc_info:
@@ -1229,7 +1206,6 @@ class TestContractValidatorCLI:
     def test_main_with_complex_valid_data(self, tmp_path, capsys):
         """Test validation with more complex valid company data."""
         import sys
-        import json
         from unittest.mock import patch
 
         company_data = {
@@ -1264,7 +1240,6 @@ class TestContractValidatorCLI:
     def test_main_with_type_violation(self, tmp_path, capsys):
         """Test validation catches type violations."""
         import sys
-        import json
         from unittest.mock import patch
 
         company_data = {

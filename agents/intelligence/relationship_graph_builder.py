@@ -8,19 +8,16 @@ companies, events, participants, and competitor mentions.
 
 import json
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from agents.base import BaseAgent
+from middleware.policy import validate_json_output
 from models.ontology import (
     EntityType,
-    RelationshipType,
-    GraphNode,
     GraphEdge,
-    Provenance,
+    GraphNode,
+    RelationshipType,
 )
-from middleware.policy import validate_json_output
 
 
 class RelationshipGraphBuilderAgent(BaseAgent):
@@ -95,7 +92,7 @@ class RelationshipGraphBuilderAgent(BaseAgent):
         associations = task.get("associations", [])
 
         self.log.info(
-            f"Building graph",
+            "Building graph",
             companies=len(companies),
             events=len(events),
             participants=len(participants),
@@ -234,7 +231,7 @@ class RelationshipGraphBuilderAgent(BaseAgent):
         await self._save_graph()
 
         self.log.info(
-            f"Graph built",
+            "Graph built",
             nodes_created=nodes_created,
             edges_created=edges_created
         )
@@ -456,7 +453,7 @@ class RelationshipGraphBuilderAgent(BaseAgent):
             "records_processed": 1
         }
 
-    def _create_association_node(self, assoc: dict) -> Optional[GraphNode]:
+    def _create_association_node(self, assoc: dict) -> GraphNode | None:
         """Create a node for an association."""
         code = assoc.get("code") or assoc.get("association_code")
         if not code:
@@ -472,7 +469,7 @@ class RelationshipGraphBuilderAgent(BaseAgent):
             }
         )
 
-    def _create_company_node(self, company: dict) -> Optional[GraphNode]:
+    def _create_company_node(self, company: dict) -> GraphNode | None:
         """Create a node for a company."""
         company_name = company.get("company_name")
         if not company_name:
@@ -494,7 +491,7 @@ class RelationshipGraphBuilderAgent(BaseAgent):
             }
         )
 
-    def _create_event_node(self, event: dict) -> Optional[GraphNode]:
+    def _create_event_node(self, event: dict) -> GraphNode | None:
         """Create a node for an event."""
         title = event.get("title")
         if not title:

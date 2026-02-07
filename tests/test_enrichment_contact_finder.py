@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # TEST INITIALIZATION
 # =============================================================================
@@ -1289,8 +1288,9 @@ class TestContactFinderAgentExtractFromText:
     ):
         """Extracts contacts from Name, Title pattern."""
         mock_config.return_value.load.return_value = {}
-        from agents.enrichment.contact_finder import ContactFinderAgent
         from bs4 import BeautifulSoup
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
 
         agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
 
@@ -1314,8 +1314,9 @@ class TestContactFinderAgentExtractFromText:
     ):
         """Limits extracted contacts to 10."""
         mock_config.return_value.load.return_value = {}
-        from agents.enrichment.contact_finder import ContactFinderAgent
         from bs4 import BeautifulSoup
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
 
         agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
 

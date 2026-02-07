@@ -6,18 +6,18 @@ Pydantic models defining the data schema for the pipeline.
 Based on gss-research-engine/ontology.yaml definitions.
 """
 
-from datetime import datetime, UTC
-from enum import Enum
-from typing import Any, Optional
-from pydantic import BaseModel, Field, field_validator
 import uuid
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # =============================================================================
 # ENUMERATIONS
 # =============================================================================
 
-class PageType(str, Enum):
+class PageType(StrEnum):
     """Classification of web page types discovered during crawling."""
 
     ASSOCIATION_HOME = "ASSOCIATION_HOME"
@@ -33,7 +33,7 @@ class PageType(str, Enum):
     OTHER = "OTHER"
 
 
-class EntityType(str, Enum):
+class EntityType(StrEnum):
     """Types of entities tracked in the pipeline."""
 
     ASSOCIATION = "Association"
@@ -43,7 +43,7 @@ class EntityType(str, Enum):
     COMPETITOR = "Competitor"
 
 
-class RelationshipType(str, Enum):
+class RelationshipType(StrEnum):
     """Types of relationships between entities."""
 
     ASSOCIATION_HAS_MEMBER = "ASSOCIATION_HAS_MEMBER"
@@ -56,7 +56,7 @@ class RelationshipType(str, Enum):
     PERSON_WORKS_AT = "PERSON_WORKS_AT"
 
 
-class ParticipantType(str, Enum):
+class ParticipantType(StrEnum):
     """Types of event participants."""
 
     SPONSOR = "SPONSOR"
@@ -66,7 +66,7 @@ class ParticipantType(str, Enum):
     ORGANIZER = "ORGANIZER"
 
 
-class SponsorTier(str, Enum):
+class SponsorTier(StrEnum):
     """Sponsorship tier levels."""
 
     PLATINUM = "PLATINUM"
@@ -78,7 +78,7 @@ class SponsorTier(str, Enum):
     OTHER = "OTHER"
 
 
-class CompetitorSignalType(str, Enum):
+class CompetitorSignalType(StrEnum):
     """Types of competitor signals detected."""
 
     SPONSOR = "SPONSOR"
@@ -91,7 +91,7 @@ class CompetitorSignalType(str, Enum):
     PRESS_RELEASE = "PRESS_RELEASE"
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """Types of events."""
 
     CONFERENCE = "CONFERENCE"
@@ -104,7 +104,7 @@ class EventType(str, Enum):
     OTHER = "OTHER"
 
 
-class QualityGrade(str, Enum):
+class QualityGrade(StrEnum):
     """Quality grade for records."""
 
     A = "A"  # 90-100
@@ -125,29 +125,28 @@ class Provenance(BaseModel):
     source_type: str = Field(default="web", description="Type of source (web, api, pdf)")
     extracted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     extracted_by: str = Field(..., description="Agent that performed extraction")
-    association_code: Optional[str] = Field(default=None, description="Association code if applicable")
-    job_id: Optional[str] = Field(default=None, description="Pipeline job ID")
-    page_type: Optional[PageType] = Field(default=None, description="Classified page type")
+    association_code: str | None = Field(default=None, description="Association code if applicable")
+    job_id: str | None = Field(default=None, description="Pipeline job ID")
+    page_type: PageType | None = Field(default=None, description="Classified page type")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Extraction confidence")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class Contact(BaseModel):
     """Contact information for a person."""
 
     full_name: str = Field(..., description="Full name of contact")
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    title: Optional[str] = None
-    department: Optional[str] = None
-    seniority: Optional[str] = None
-    email: Optional[str] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    title: str | None = None
+    department: str | None = None
+    seniority: str | None = None
+    email: str | None = None
     email_verified: bool = False
-    phone: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    data_source: Optional[str] = None
+    phone: str | None = None
+    linkedin_url: str | None = None
+    data_source: str | None = None
     confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
@@ -162,31 +161,31 @@ class Company(BaseModel):
 
     # Core identification
     company_name: str = Field(..., description="Canonical company name")
-    normalized_name: Optional[str] = Field(default=None, description="Normalized name for matching")
-    domain: Optional[str] = Field(default=None, description="Primary website domain")
-    website: Optional[str] = Field(default=None, description="Full website URL")
+    normalized_name: str | None = Field(default=None, description="Normalized name for matching")
+    domain: str | None = Field(default=None, description="Primary website domain")
+    website: str | None = Field(default=None, description="Full website URL")
 
     # Location
-    city: Optional[str] = None
-    state: Optional[str] = Field(default=None, max_length=50)
+    city: str | None = None
+    state: str | None = Field(default=None, max_length=50)
     country: str = Field(default="United States")
-    full_address: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    full_address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     # Firmographics
-    employee_count_min: Optional[int] = Field(default=None, ge=0)
-    employee_count_max: Optional[int] = Field(default=None, ge=0)
-    revenue_min_usd: Optional[int] = Field(default=None, ge=0)
-    revenue_max_usd: Optional[int] = Field(default=None, ge=0)
-    year_founded: Optional[int] = Field(default=None, ge=1800, le=2030)
-    naics_code: Optional[str] = None
-    sic_code: Optional[str] = None
-    industry: Optional[str] = None
+    employee_count_min: int | None = Field(default=None, ge=0)
+    employee_count_max: int | None = Field(default=None, ge=0)
+    revenue_min_usd: int | None = Field(default=None, ge=0)
+    revenue_max_usd: int | None = Field(default=None, ge=0)
+    year_founded: int | None = Field(default=None, ge=1800, le=2030)
+    naics_code: str | None = None
+    sic_code: str | None = None
+    industry: str | None = None
 
     # Technology
-    erp_system: Optional[str] = None
-    crm_system: Optional[str] = None
+    erp_system: str | None = None
+    crm_system: str | None = None
     tech_stack: list[str] = Field(default_factory=list)
 
     # Associations and contacts
@@ -194,8 +193,8 @@ class Company(BaseModel):
     contacts: list[Contact] = Field(default_factory=list)
 
     # Quality metadata
-    quality_score: Optional[int] = Field(default=None, ge=0, le=100)
-    quality_grade: Optional[QualityGrade] = None
+    quality_score: int | None = Field(default=None, ge=0, le=100)
+    quality_grade: QualityGrade | None = None
     data_sources: list[str] = Field(default_factory=list)
 
     # Provenance tracking
@@ -204,7 +203,7 @@ class Company(BaseModel):
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    last_verified_at: Optional[datetime] = None
+    last_verified_at: datetime | None = None
 
     @field_validator('normalized_name', mode='before')
     @classmethod
@@ -253,32 +252,32 @@ class Event(BaseModel):
     # Core identification
     title: str = Field(..., description="Event title")
     event_type: EventType = Field(default=EventType.OTHER)
-    description: Optional[str] = None
+    description: str | None = None
 
     # Dates
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    registration_deadline: Optional[datetime] = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    registration_deadline: datetime | None = None
 
     # Location
-    venue: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
+    venue: str | None = None
+    city: str | None = None
+    state: str | None = None
     country: str = Field(default="United States")
     is_virtual: bool = Field(default=False)
 
     # URLs
-    event_url: Optional[str] = None
-    registration_url: Optional[str] = None
+    event_url: str | None = None
+    registration_url: str | None = None
 
     # Organizer
-    organizer_name: Optional[str] = None
-    organizer_association: Optional[str] = Field(default=None, description="Association code")
+    organizer_name: str | None = None
+    organizer_association: str | None = Field(default=None, description="Association code")
 
     # Participants
-    expected_attendees: Optional[int] = None
-    exhibitor_count: Optional[int] = None
-    sponsor_count: Optional[int] = None
+    expected_attendees: int | None = None
+    exhibitor_count: int | None = None
+    sponsor_count: int | None = None
 
     # Provenance
     provenance: list[Provenance] = Field(default_factory=list)
@@ -295,24 +294,24 @@ class EventParticipant(BaseModel):
 
     # Links
     event_id: str = Field(..., description="Event this participant belongs to")
-    company_id: Optional[str] = Field(default=None, description="Linked company if resolved")
+    company_id: str | None = Field(default=None, description="Linked company if resolved")
 
     # Participant info
     participant_type: ParticipantType
     company_name: str = Field(..., description="Company name as listed")
-    company_website: Optional[str] = None
+    company_website: str | None = None
 
     # Sponsor-specific
-    sponsor_tier: Optional[SponsorTier] = None
+    sponsor_tier: SponsorTier | None = None
 
     # Exhibitor-specific
-    booth_number: Optional[str] = None
-    booth_category: Optional[str] = None
+    booth_number: str | None = None
+    booth_category: str | None = None
 
     # Speaker-specific
-    speaker_name: Optional[str] = None
-    speaker_title: Optional[str] = None
-    presentation_title: Optional[str] = None
+    speaker_name: str | None = None
+    speaker_title: str | None = None
+    presentation_title: str | None = None
 
     # Provenance
     provenance: list[Provenance] = Field(default_factory=list)
@@ -328,7 +327,7 @@ class CompetitorSignal(BaseModel):
 
     # Competitor identification
     competitor_name: str = Field(..., description="Name of competitor product/company")
-    competitor_normalized: Optional[str] = None
+    competitor_normalized: str | None = None
 
     # Signal details
     signal_type: CompetitorSignalType
@@ -336,9 +335,9 @@ class CompetitorSignal(BaseModel):
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
 
     # Related entities
-    source_company_id: Optional[str] = None
-    source_event_id: Optional[str] = None
-    source_association: Optional[str] = None
+    source_company_id: str | None = None
+    source_event_id: str | None = None
+    source_association: str | None = None
 
     # Provenance
     provenance: list[Provenance] = Field(default_factory=list)
@@ -369,7 +368,7 @@ class GraphEdge(BaseModel):
     relationship_type: RelationshipType
     properties: dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    provenance: Optional[Provenance] = None
+    provenance: Provenance | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -384,7 +383,7 @@ class PageClassification(BaseModel):
     page_type: PageType
     confidence: float = Field(ge=0.0, le=1.0)
     signals: dict[str, Any] = Field(default_factory=dict, description="Classification signals")
-    recommended_extractor: Optional[str] = Field(default=None, description="Agent to handle extraction")
+    recommended_extractor: str | None = Field(default=None, description="Agent to handle extraction")
     classified_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -399,19 +398,19 @@ class AccessVerdict(BaseModel):
     # robots.txt
     robots_txt_exists: bool = False
     robots_txt_allows: bool = True
-    crawl_delay: Optional[float] = None
+    crawl_delay: float | None = None
 
     # Authentication
     requires_auth: bool = False
-    auth_type: Optional[str] = None  # login, paywall, api_key
+    auth_type: str | None = None  # login, paywall, api_key
 
     # Rate limiting
     suggested_rate: float = Field(default=0.5, description="Requests per second")
-    daily_limit: Optional[int] = None
+    daily_limit: int | None = None
 
     # ToS
     tos_reviewed: bool = False
-    tos_allows_crawling: Optional[bool] = None
+    tos_allows_crawling: bool | None = None
 
     checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -428,13 +427,13 @@ class SourceBaseline(BaseModel):
     page_structure_hash: str = Field(..., description="Hash of overall page structure")
 
     # Content indicators
-    expected_item_count: Optional[int] = None
-    content_hash: Optional[str] = None
+    expected_item_count: int | None = None
+    content_hash: str | None = None
 
     # Status
     is_active: bool = True
-    last_checked_at: Optional[datetime] = None
-    last_changed_at: Optional[datetime] = None
+    last_checked_at: datetime | None = None
+    last_changed_at: datetime | None = None
     change_count: int = Field(default=0)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

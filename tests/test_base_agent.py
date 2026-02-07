@@ -4,14 +4,12 @@ Tests for agents/base.py - BaseAgent class
 Tests lifecycle management, hooks, utilities, and error handling.
 """
 
-import asyncio
 import json
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # =============================================================================
 # TEST AGENT SUBCLASS
@@ -124,7 +122,7 @@ class TestBaseAgentInitialization:
         mock_config.return_value.load.return_value = {}
         AgentClass = create_concrete_agent()
 
-        agent = AgentClass(agent_type="test.agent")
+        AgentClass(agent_type="test.agent")
 
         mock_config.assert_called_once()
         mock_logger.assert_called_once()
@@ -183,7 +181,7 @@ class TestBaseAgentInitialization:
             setup_called.append(kwargs)
 
         AgentClass = create_concrete_agent(setup_hook=setup_hook)
-        agent = AgentClass(agent_type="test.agent", extra="data")
+        AgentClass(agent_type="test.agent", extra="data")
 
         assert len(setup_called) == 1
         assert setup_called[0].get("extra") == "data"
@@ -318,7 +316,6 @@ class TestBaseAgentLifecycleSuccess:
         def setup_hook(agent, **kwargs):
             pass
 
-        original_run = None
         AgentClass = create_concrete_agent(setup_hook=setup_hook)
         agent = AgentClass(agent_type="test.agent")
 
@@ -432,7 +429,7 @@ class TestBaseAgentLifecycleSuccess:
         agent = AgentClass(agent_type="test.agent", job_id="job-123")
 
         original_task = {"url": "https://example.com"}
-        result = await agent.execute(original_task)
+        await agent.execute(original_task)
 
         # _pre_execute adds _meta to task
         assert "_meta" in original_task
@@ -956,7 +953,7 @@ class TestBaseAgentLoadSchema:
         AgentClass = create_concrete_agent()
         agent = AgentClass(agent_type="test.agent")
 
-        schema = agent.load_schema("pma")
+        agent.load_schema("pma")
 
         mock_config.return_value.load.assert_called_with("schemas/pma")
 

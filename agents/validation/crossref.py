@@ -9,8 +9,7 @@ import asyncio
 import os
 import re
 import socket
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from agents.base import BaseAgent
 from skills.common.SKILL import extract_domain
@@ -136,7 +135,7 @@ class CrossRefAgent(BaseAgent):
                 self.log.info(f"Validated {i + 1}/{len(records)} records")
 
         self.log.info(
-            f"Cross-reference complete",
+            "Cross-reference complete",
             dns_valid=stats["dns_valid"],
             places_matched=stats["places_matched"]
         )
@@ -148,7 +147,7 @@ class CrossRefAgent(BaseAgent):
             "records_processed": len(records)
         }
 
-    async def _validate_dns_mx(self, domain: str) -> Optional[bool]:
+    async def _validate_dns_mx(self, domain: str) -> bool | None:
         """Validate domain has MX records (can receive email).
 
         Three-tier fallback:
@@ -222,7 +221,7 @@ class CrossRefAgent(BaseAgent):
         company_name: str,
         city: str,
         state: str
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """Validate company exists at location using Google Places."""
         api_key = os.getenv("GOOGLE_PLACES_API_KEY")
         if not api_key:
@@ -268,7 +267,7 @@ class CrossRefAgent(BaseAgent):
 
         return None
 
-    async def _validate_linkedin(self, domain: str) -> Optional[bool]:
+    async def _validate_linkedin(self, domain: str) -> bool | None:
         """Check if company has LinkedIn page."""
         # This would typically use LinkedIn API
         # For now, we'll do a simple check

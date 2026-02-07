@@ -15,11 +15,6 @@ from db.models import (
     Base,
     CompanyModel,
     ContactModel,
-    CompetitorSignalModel,
-    EventModel,
-    EventParticipantModel,
-    ExtractionJobModel,
-    QualityAuditLogModel,
 )
 from db.repository import (
     AuditRepository,
@@ -30,7 +25,6 @@ from db.repository import (
     EventRepository,
     ExtractionJobRepository,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -672,8 +666,9 @@ class TestDatabasePool:
 
     @pytest.mark.asyncio
     async def test_pool_missing_url(self):
-        from db.connection import DatabasePool
         import os
+
+        from db.connection import DatabasePool
         os.environ.pop("DATABASE_URL", None)
 
         with pytest.raises(ValueError, match="database_url"):

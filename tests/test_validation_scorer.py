@@ -5,12 +5,10 @@ Tests quality scoring calculation including completeness, accuracy,
 freshness, source reliability, and final grading.
 """
 
-import asyncio
-from datetime import datetime, timedelta, UTC
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
-
 
 # =============================================================================
 # TEST FIXTURES
@@ -22,9 +20,9 @@ def create_scorer_agent(agent_config: dict = None):
     from agents.validation.scorer import ScorerAgent
 
     with patch("agents.base.Config") as mock_config, \
-         patch("agents.base.StructuredLogger") as mock_logger, \
-         patch("agents.base.AsyncHTTPClient") as mock_http, \
-         patch("agents.base.RateLimiter") as mock_limiter:
+         patch("agents.base.StructuredLogger"), \
+         patch("agents.base.AsyncHTTPClient"), \
+         patch("agents.base.RateLimiter"):
 
         mock_config.return_value.load.return_value = agent_config or {}
 

@@ -9,13 +9,11 @@ For SQLite test compatibility, JSON type is used (auto-adapts to JSONB on Postgr
 """
 
 import uuid
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -25,7 +23,6 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -55,41 +52,41 @@ class CompanyModel(Base):
     # Core identification
     canonical_name: Mapped[str] = mapped_column(String(500), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(500), nullable=False)
-    domain: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
-    website: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    website: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Location
-    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    state: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(50), nullable=True)
     country: Mapped[str] = mapped_column(String(100), default="United States")
-    full_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    full_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Firmographics
-    employee_count_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    employee_count_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    revenue_min_usd: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    revenue_max_usd: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    year_founded: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    naics_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    sic_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    industry: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    employee_count_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    employee_count_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revenue_min_usd: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revenue_max_usd: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    year_founded: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    naics_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    sic_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Technology
-    erp_system: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    crm_system: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    tech_stack: Mapped[Optional[dict]] = mapped_column(JSON, default=list)
+    erp_system: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    crm_system: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tech_stack: Mapped[dict | None] = mapped_column(JSON, default=list)
 
     # Metadata
-    quality_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    quality_grade: Mapped[Optional[str]] = mapped_column(String(1), nullable=True)
-    data_sources: Mapped[Optional[dict]] = mapped_column(JSON, default=list)
+    quality_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quality_grade: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    data_sources: Mapped[dict | None] = mapped_column(JSON, default=list)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
-    last_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     memberships = relationship("AssociationMembershipModel", back_populates="company", cascade="all, delete-orphan")
@@ -115,22 +112,22 @@ class AssociationMembershipModel(Base):
     __tablename__ = "association_memberships"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    company_id: Mapped[Optional[str]] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True
     )
 
     # Association info
     association_code: Mapped[str] = mapped_column(String(20), nullable=False)
-    association_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    association_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Membership details
-    membership_tier: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    membership_tier: Mapped[str | None] = mapped_column(String(50), nullable=True)
     membership_status: Mapped[str] = mapped_column(String(20), default="active")
-    member_since: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    member_since: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Source
-    profile_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    raw_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    profile_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -154,28 +151,28 @@ class ContactModel(Base):
     __tablename__ = "contacts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    company_id: Mapped[Optional[str]] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True
     )
 
     # Contact info
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    seniority: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    seniority: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Communication
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    linkedin_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    linkedin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Metadata
-    data_source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    data_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -202,7 +199,7 @@ class ExtractionJobModel(Base):
 
     # Job info
     job_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    association_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    association_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(String(20), default="pending")
@@ -216,17 +213,17 @@ class ExtractionJobModel(Base):
     skipped_items: Mapped[int] = mapped_column(Integer, default=0)
 
     # Timing
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Checkpoints
-    last_checkpoint: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    checkpoint_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_checkpoint: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    checkpoint_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Errors
     error_count: Mapped[int] = mapped_column(Integer, default=0)
-    error_log: Mapped[Optional[dict]] = mapped_column(JSON, default=list)
-    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_log: Mapped[dict | None] = mapped_column(JSON, default=list)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -251,25 +248,25 @@ class QualityAuditLogModel(Base):
     __tablename__ = "quality_audit_log"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    company_id: Mapped[Optional[str]] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True
     )
-    job_id: Mapped[Optional[str]] = mapped_column(
+    job_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("extraction_jobs.id", ondelete="SET NULL"), nullable=True
     )
 
     # Change details
     field_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    old_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    new_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Validation
-    validation_result: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    validator_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    validation_result: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    validator_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Metadata
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationships
@@ -291,28 +288,28 @@ class URLQueueModel(Base):
     __tablename__ = "url_queue"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    job_id: Mapped[Optional[str]] = mapped_column(
+    job_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("extraction_jobs.id", ondelete="CASCADE"), nullable=True
     )
 
     # URL info
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    association_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    association_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(String(20), default="pending")
     priority: Mapped[int] = mapped_column(Integer, default=0)
 
     # Metadata
-    source_url: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     depth: Mapped[int] = mapped_column(Integer, default=0)
 
     # Processing
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -337,7 +334,7 @@ class DuplicateGroupModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
 
     # Canonical record
-    canonical_company_id: Mapped[Optional[str]] = mapped_column(
+    canonical_company_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
     )
 
@@ -345,13 +342,13 @@ class DuplicateGroupModel(Base):
     member_company_ids: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     # Match details
-    match_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    match_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    match_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(String(20), default="merged")
-    reviewed_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -373,36 +370,36 @@ class EventModel(Base):
     # Core identification
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), default="OTHER")
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Dates
-    start_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    registration_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    registration_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Location
-    venue: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
-    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    state: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    venue: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(50), nullable=True)
     country: Mapped[str] = mapped_column(String(100), default="United States")
     is_virtual: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # URLs
-    event_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    registration_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    event_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    registration_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Organizer
-    organizer_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    organizer_association: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    organizer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    organizer_association: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Participant counts
-    expected_attendees: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    exhibitor_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    sponsor_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expected_attendees: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exhibitor_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sponsor_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Provenance
-    source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    extracted_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    extracted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -429,33 +426,33 @@ class EventParticipantModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
 
     # Links
-    event_id: Mapped[Optional[str]] = mapped_column(
+    event_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("events.id", ondelete="CASCADE"), nullable=True
     )
-    company_id: Mapped[Optional[str]] = mapped_column(
+    company_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
     )
 
     # Participant info
     participant_type: Mapped[str] = mapped_column(String(20), nullable=False)
     company_name: Mapped[str] = mapped_column(String(500), nullable=False)
-    company_website: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    company_website: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Sponsor-specific
-    sponsor_tier: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    sponsor_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Exhibitor-specific
-    booth_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    booth_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    booth_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    booth_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Speaker-specific
-    speaker_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    speaker_title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    presentation_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    speaker_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    speaker_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    presentation_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Provenance
-    source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    extracted_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    extracted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -482,7 +479,7 @@ class CompetitorSignalModel(Base):
 
     # Competitor identification
     competitor_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    competitor_normalized: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    competitor_normalized: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Signal details
     signal_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -490,17 +487,17 @@ class CompetitorSignalModel(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.80)
 
     # Related entities
-    source_company_id: Mapped[Optional[str]] = mapped_column(
+    source_company_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
     )
-    source_event_id: Mapped[Optional[str]] = mapped_column(
+    source_event_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("events.id", ondelete="SET NULL"), nullable=True
     )
-    source_association: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    source_association: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Provenance
-    source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    extracted_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    extracted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Timestamps
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -531,12 +528,12 @@ class EntityRelationshipModel(Base):
     relationship_type: Mapped[str] = mapped_column(String(50), nullable=False)
 
     # Metadata
-    properties: Mapped[Optional[dict]] = mapped_column(JSON, default=dict)
+    properties: Mapped[dict | None] = mapped_column(JSON, default=dict)
     confidence: Mapped[float] = mapped_column(Float, default=1.00)
 
     # Provenance
-    source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    extracted_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    extracted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -561,20 +558,20 @@ class SourceBaselineModel(Base):
     # Source identification
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # DOM structure
-    selector_hashes: Mapped[Optional[dict]] = mapped_column(JSON, default=dict)
-    page_structure_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    selector_hashes: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    page_structure_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Content indicators
-    expected_item_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    expected_item_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     change_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # Alert configuration

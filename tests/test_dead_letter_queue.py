@@ -5,12 +5,10 @@ Phase 4: Dead-Letter Queue
 """
 
 import json
-from datetime import datetime, UTC
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # =============================================================================
 # TEST DLQ INITIALIZATION
@@ -25,7 +23,7 @@ class TestDeadLetterQueueInit:
         from agents.base import DeadLetterQueue
 
         dlq_dir = tmp_path / "dlq"
-        dlq = DeadLetterQueue(queue_dir=str(dlq_dir))
+        DeadLetterQueue(queue_dir=str(dlq_dir))
 
         assert dlq_dir.exists()
 
@@ -285,6 +283,7 @@ class TestDLQSpawnerIntegration:
     async def test_spawn_timeout_creates_dlq_entry(self, mock_logger, tmp_path):
         """spawn() timeout pushes task to DLQ."""
         import asyncio
+
         from agents.base import AgentSpawner, DeadLetterQueue
 
         spawner = AgentSpawner()

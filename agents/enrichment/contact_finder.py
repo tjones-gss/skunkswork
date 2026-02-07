@@ -5,11 +5,8 @@ NAM Intelligence Pipeline
 Identifies key decision-makers at target companies.
 """
 
-import asyncio
 import os
 import re
-from typing import Optional
-from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
@@ -141,7 +138,7 @@ class ContactFinderAgent(BaseAgent):
                 self.log.info(f"Processed {i + 1}/{len(records)} records")
 
         self.log.info(
-            f"Contact finding complete",
+            "Contact finding complete",
             total_contacts=total_contacts,
             companies_with_contacts=sum(1 for r in enriched_records if r.get("contacts"))
         )
@@ -296,7 +293,7 @@ class ContactFinderAgent(BaseAgent):
 
         return contacts
 
-    def _extract_contact_from_element(self, element, domain: str) -> Optional[dict]:
+    def _extract_contact_from_element(self, element, domain: str) -> dict | None:
         """Extract contact info from a DOM element."""
         contact = {"source": "website"}
 

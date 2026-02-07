@@ -7,16 +7,17 @@ health checks, and graceful shutdown.
 """
 
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy import text
 
 # Module-level singleton
 _pool: Optional["DatabasePool"] = None
@@ -39,7 +40,7 @@ class DatabasePool:
 
     def __init__(
         self,
-        database_url: Optional[str] = None,
+        database_url: str | None = None,
         *,
         pool_size: int = 5,
         max_overflow: int = 10,
@@ -55,8 +56,8 @@ class DatabasePool:
         # Convert sync URLs to async driver equivalents
         self._url = self._to_async_url(self._url)
 
-        self._engine: Optional[AsyncEngine] = None
-        self._session_factory: Optional[async_sessionmaker[AsyncSession]] = None
+        self._engine: AsyncEngine | None = None
+        self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
         self._pool_size = pool_size
         self._max_overflow = max_overflow
@@ -129,7 +130,7 @@ class DatabasePool:
             self._session_factory = None
 
     @property
-    def engine(self) -> Optional[AsyncEngine]:
+    def engine(self) -> AsyncEngine | None:
         return self._engine
 
     @property
@@ -137,7 +138,7 @@ class DatabasePool:
         return self._engine is not None
 
 
-async def get_pool(database_url: Optional[str] = None) -> DatabasePool:
+async def get_pool(database_url: str | None = None) -> DatabasePool:
     """Get or create the module-level DatabasePool singleton."""
     global _pool
     if _pool is None or not _pool.is_initialized:

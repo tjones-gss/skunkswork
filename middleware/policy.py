@@ -16,7 +16,8 @@ Rules enforced:
 import functools
 import json
 import logging
-from typing import Any, Callable, Optional, TypeVar, Union
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -40,7 +41,7 @@ class PolicyViolation(Exception):
 # POLICY: PROVENANCE REQUIRED
 # =============================================================================
 
-def enforce_provenance(func: Callable[..., T]) -> Callable[..., T]:
+def enforce_provenance[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Ensure all output records have provenance tracking.
 
@@ -111,7 +112,7 @@ CRAWLER_AGENTS = {
 }
 
 
-def crawler_only(func: Callable[..., T]) -> Callable[..., T]:
+def crawler_only[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Restrict page fetching to crawler agents only.
 
@@ -154,7 +155,7 @@ def is_crawler_agent(agent_type: str) -> bool:
 ENRICHMENT_AGENTS = {"firmographic", "tech_stack", "contact_finder"}
 
 
-def enrichment_http(func: Callable[..., T]) -> Callable[..., T]:
+def enrichment_http[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Allow HTTP access for enrichment agents with logging.
 
@@ -204,7 +205,7 @@ def is_enrichment_agent(agent_type: str) -> bool:
 # POLICY: VALIDATE JSON OUTPUT
 # =============================================================================
 
-def validate_json_output(func: Callable[..., T]) -> Callable[..., T]:
+def validate_json_output[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Ensure all outputs are valid JSON-serializable.
 
@@ -306,7 +307,7 @@ AUTH_INDICATORS = [
 ]
 
 
-def auth_pages_flagged(func: Callable[..., T]) -> Callable[..., T]:
+def auth_pages_flagged[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Flag authenticated pages rather than attempting to scrape them.
 
@@ -366,7 +367,7 @@ def auth_pages_flagged(func: Callable[..., T]) -> Callable[..., T]:
 # COMPOSITE DECORATORS
 # =============================================================================
 
-def extraction_agent(func: Callable[..., T]) -> Callable[..., T]:
+def extraction_agent[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Composite decorator for extraction agents.
 
@@ -390,7 +391,7 @@ def extraction_agent(func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
-def validation_agent(func: Callable[..., T]) -> Callable[..., T]:
+def validation_agent[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Composite decorator for validation agents.
 
@@ -435,7 +436,7 @@ class PolicyChecker:
         return len(missing) == 0, missing
 
     @staticmethod
-    def check_json_serializable(data: Any) -> tuple[bool, Optional[str]]:
+    def check_json_serializable(data: Any) -> tuple[bool, str | None]:
         """Check if data is JSON serializable."""
         try:
             if isinstance(data, BaseModel):
@@ -446,7 +447,7 @@ class PolicyChecker:
             return False, str(e)
 
     @staticmethod
-    def check_auth_required(html: str) -> tuple[bool, Optional[str]]:
+    def check_auth_required(html: str) -> tuple[bool, str | None]:
         """Check if page requires authentication."""
         if not html:
             return False, None

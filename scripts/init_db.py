@@ -13,8 +13,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dotenv import load_dotenv
 import psycopg2
+from dotenv import load_dotenv
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 load_dotenv()
@@ -30,13 +30,13 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- For fuzzy text search
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS companies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    
+
     -- Core identification
     canonical_name VARCHAR(500) NOT NULL,
     normalized_name VARCHAR(500) NOT NULL,
     domain VARCHAR(255),
     website VARCHAR(500),
-    
+
     -- Location
     city VARCHAR(100),
     state VARCHAR(50),
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS companies (
     full_address TEXT,
     latitude DECIMAL(10, 8),
     longitude DECIMAL(11, 8),
-    
+
     -- Firmographics
     employee_count_min INTEGER,
     employee_count_max INTEGER,
@@ -54,22 +54,22 @@ CREATE TABLE IF NOT EXISTS companies (
     naics_code VARCHAR(10),
     sic_code VARCHAR(10),
     industry VARCHAR(200),
-    
+
     -- Technology
     erp_system VARCHAR(100),
     crm_system VARCHAR(100),
     tech_stack JSONB DEFAULT '[]'::jsonb,
-    
+
     -- Metadata
     quality_score INTEGER CHECK (quality_score >= 0 AND quality_score <= 100),
     quality_grade CHAR(1),
     data_sources JSONB DEFAULT '[]'::jsonb,
-    
+
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_verified_at TIMESTAMP WITH TIME ZONE,
-    
+
     -- Constraints
     CONSTRAINT unique_domain UNIQUE (domain)
 );
@@ -90,24 +90,24 @@ CREATE INDEX IF NOT EXISTS idx_companies_employee_count ON companies (employee_c
 CREATE TABLE IF NOT EXISTS association_memberships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
-    
+
     -- Association info
     association_code VARCHAR(20) NOT NULL,
     association_name VARCHAR(200),
-    
+
     -- Membership details
     membership_tier VARCHAR(50),
     membership_status VARCHAR(20) DEFAULT 'active',
     member_since INTEGER,  -- Year
-    
+
     -- Source
     profile_url VARCHAR(500),
     raw_data JSONB,
-    
+
     -- Timestamps
     extracted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- Constraints
     CONSTRAINT unique_membership UNIQUE (company_id, association_code)
 );
@@ -123,7 +123,7 @@ CREATE INDEX IF NOT EXISTS idx_memberships_tier ON association_memberships (memb
 CREATE TABLE IF NOT EXISTS contacts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
-    
+
     -- Contact info
     full_name VARCHAR(200) NOT NULL,
     first_name VARCHAR(100),
@@ -131,22 +131,22 @@ CREATE TABLE IF NOT EXISTS contacts (
     title VARCHAR(200),
     department VARCHAR(100),
     seniority VARCHAR(50),
-    
+
     -- Communication
     email VARCHAR(255),
     email_verified BOOLEAN DEFAULT FALSE,
     email_verified_at TIMESTAMP WITH TIME ZONE,
     phone VARCHAR(50),
     linkedin_url VARCHAR(500),
-    
+
     -- Metadata
     data_source VARCHAR(100),
     confidence_score DECIMAL(3, 2),
-    
+
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- Constraints
     CONSTRAINT unique_contact_email UNIQUE (company_id, email)
 );
@@ -161,14 +161,14 @@ CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts (email);
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS extraction_jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    
+
     -- Job info
     job_type VARCHAR(50) NOT NULL,  -- full_extract, incremental, enrichment, validation
     association_code VARCHAR(20),
-    
+
     -- Status
     status VARCHAR(20) DEFAULT 'pending',  -- pending, running, completed, failed, cancelled
-    
+
     -- Progress
     total_items INTEGER DEFAULT 0,
     processed_items INTEGER DEFAULT 0,
@@ -176,20 +176,20 @@ CREATE TABLE IF NOT EXISTS extraction_jobs (
     updated_items INTEGER DEFAULT 0,
     failed_items INTEGER DEFAULT 0,
     skipped_items INTEGER DEFAULT 0,
-    
+
     -- Timing
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
-    
+
     -- Checkpoints
     last_checkpoint JSONB,
     checkpoint_at TIMESTAMP WITH TIME ZONE,
-    
+
     -- Errors
     error_count INTEGER DEFAULT 0,
     error_log JSONB DEFAULT '[]'::jsonb,
     last_error TEXT,
-    
+
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -207,17 +207,17 @@ CREATE TABLE IF NOT EXISTS quality_audit_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
     job_id UUID REFERENCES extraction_jobs(id) ON DELETE SET NULL,
-    
+
     -- Change details
     field_name VARCHAR(100) NOT NULL,
     old_value TEXT,
     new_value TEXT,
-    
+
     -- Validation
     validation_result VARCHAR(20),  -- passed, failed, warning, corrected
     validator_name VARCHAR(100),
     confidence_score DECIMAL(3, 2),
-    
+
     -- Metadata
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -234,29 +234,29 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON quality_audit_log (created_at DE
 CREATE TABLE IF NOT EXISTS url_queue (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_id UUID REFERENCES extraction_jobs(id) ON DELETE CASCADE,
-    
+
     -- URL info
     url VARCHAR(2000) NOT NULL,
     url_hash VARCHAR(64) NOT NULL,  -- SHA-256 hash for deduplication
     association_code VARCHAR(20),
-    
+
     -- Status
     status VARCHAR(20) DEFAULT 'pending',  -- pending, processing, completed, failed, skipped
     priority INTEGER DEFAULT 0,
-    
+
     -- Metadata
     source_url VARCHAR(2000),
     depth INTEGER DEFAULT 0,
-    
+
     -- Processing
     attempts INTEGER DEFAULT 0,
     last_attempt_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     error_message TEXT,
-    
+
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- Constraints
     CONSTRAINT unique_url_per_job UNIQUE (job_id, url_hash)
 );
@@ -535,7 +535,7 @@ CREATE TRIGGER update_jobs_updated_at
 
 -- View: Company summary with latest membership
 CREATE OR REPLACE VIEW company_summary AS
-SELECT 
+SELECT
     c.id,
     c.canonical_name,
     c.domain,
@@ -623,7 +623,7 @@ ORDER BY signal_count DESC;
 
 -- Insert association reference data
 INSERT INTO association_memberships (id, company_id, association_code, association_name)
-SELECT 
+SELECT
     uuid_generate_v4(),
     NULL,
     code,
@@ -668,50 +668,50 @@ DROP TABLE IF EXISTS companies CASCADE;
 def get_connection():
     """Get database connection from environment."""
     database_url = os.getenv("DATABASE_URL")
-    
+
     if not database_url:
         raise ValueError("DATABASE_URL environment variable not set")
-    
+
     return psycopg2.connect(database_url)
 
 
 def create_database_if_not_exists():
     """Create the database if it doesn't exist."""
     database_url = os.getenv("DATABASE_URL")
-    
+
     if not database_url:
         raise ValueError("DATABASE_URL environment variable not set")
-    
+
     # Parse database name from URL
     # Format: postgresql://user:pass@host:port/dbname
     db_name = database_url.split("/")[-1].split("?")[0]
     base_url = database_url.rsplit("/", 1)[0] + "/postgres"
-    
+
     conn = psycopg2.connect(base_url)
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-    
+
     with conn.cursor() as cur:
-        cur.execute(f"SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
         exists = cur.fetchone()
-        
+
         if not exists:
             print(f"Creating database: {db_name}")
             cur.execute(f'CREATE DATABASE "{db_name}"')
             print(f"Database {db_name} created successfully")
         else:
             print(f"Database {db_name} already exists")
-    
+
     conn.close()
 
 
 def init_database(drop_existing: bool = False):
     """Initialize database tables."""
-    
+
     # Create database if needed
     create_database_if_not_exists()
-    
+
     conn = get_connection()
-    
+
     try:
         with conn.cursor() as cur:
             if drop_existing:
@@ -719,25 +719,25 @@ def init_database(drop_existing: bool = False):
                 cur.execute(DROP_TABLES_SQL)
                 conn.commit()
                 print("Existing tables dropped")
-            
+
             print("Creating tables...")
             cur.execute(CREATE_TABLES_SQL)
             conn.commit()
             print("Tables created successfully")
-            
+
             # Verify tables
             cur.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
+                SELECT table_name
+                FROM information_schema.tables
                 WHERE table_schema = 'public'
                 ORDER BY table_name
             """)
             tables = cur.fetchall()
-            
+
             print(f"\nCreated {len(tables)} tables:")
             for table in tables:
                 print(f"  - {table[0]}")
-                
+
     except Exception as e:
         conn.rollback()
         print(f"Error initializing database: {e}")
@@ -748,18 +748,18 @@ def init_database(drop_existing: bool = False):
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Initialize NAM Intelligence database")
     parser.add_argument("--drop", action="store_true", help="Drop existing tables first")
     parser.add_argument("--force", action="store_true", help="Skip confirmation for drop")
-    
+
     args = parser.parse_args()
-    
+
     if args.drop and not args.force:
         confirm = input("This will DELETE ALL DATA. Type 'yes' to confirm: ")
         if confirm.lower() != "yes":
             print("Aborted")
             sys.exit(0)
-    
+
     init_database(drop_existing=args.drop)
     print("\nDatabase initialization complete!")

@@ -4,14 +4,12 @@ Tests for orchestrator error thresholds, metrics, and --log-level.
 Phase 6: Orchestrator Hardening
 """
 
-import asyncio
 import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-
 
 # =============================================================================
 # HELPERS
@@ -27,10 +25,10 @@ def _make_orchestrator(
 ):
     """Create an OrchestratorAgent for testing."""
     with patch("agents.base.Config") as mc, \
-         patch("agents.base.StructuredLogger") as ml, \
-         patch("agents.base.AsyncHTTPClient") as mh, \
-         patch("agents.base.RateLimiter") as mr, \
-         patch("agents.base.DeadLetterQueue") as mdlq:
+         patch("agents.base.StructuredLogger"), \
+         patch("agents.base.AsyncHTTPClient"), \
+         patch("agents.base.RateLimiter"), \
+         patch("agents.base.DeadLetterQueue"):
 
         default_config = {
             "associations": {
@@ -343,7 +341,7 @@ class TestCLILogLevel:
 
             mock_instance.execute = mock_execute
 
-            result = runner.invoke(main, [
+            runner.invoke(main, [
                 "--mode", "extract",
                 "--log-level", "DEBUG",
                 "--dry-run",
@@ -369,7 +367,7 @@ class TestCLILogLevel:
             mock_instance.execute = mock_execute
             mock_cls.return_value = mock_instance
 
-            result = runner.invoke(main, [
+            runner.invoke(main, [
                 "--mode", "extract",
                 "--log-level", "ERROR",
                 "--dry-run",
@@ -394,7 +392,7 @@ class TestCLILogLevel:
             mock_instance.execute = mock_execute
             mock_cls.return_value = mock_instance
 
-            result = runner.invoke(main, [
+            runner.invoke(main, [
                 "--mode", "extract",
                 "--log-level", "warning",
                 "--dry-run",
@@ -419,7 +417,7 @@ class TestCLILogLevel:
             mock_instance.execute = mock_execute
             mock_cls.return_value = mock_instance
 
-            result = runner.invoke(main, [
+            runner.invoke(main, [
                 "--mode", "extract",
                 "--dry-run",
             ])

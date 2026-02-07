@@ -9,14 +9,15 @@ Provides decorators and utilities for enforcing I/O contracts.
 import functools
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
 # Try to import jsonschema, fall back gracefully if not available
 try:
-    import jsonschema
+    import jsonschema  # noqa: F401
     from jsonschema import Draft202012Validator
     from referencing import Registry, Resource
     from referencing.jsonschema import DRAFT202012
@@ -78,7 +79,7 @@ class ContractValidator:
         self.contracts_dir = contracts_dir or CONTRACTS_DIR
         self._schema_cache: dict[str, dict] = {}
         self._validator_cache: dict[str, Any] = {}
-        self._registry: Optional[Any] = None  # Lazy-loaded referencing Registry
+        self._registry: Any | None = None  # Lazy-loaded referencing Registry
 
     def _load_schema(self, schema_path: str) -> dict:
         """Load a schema from file, using cache."""
@@ -94,7 +95,7 @@ class ContractValidator:
         if not full_path.exists():
             raise FileNotFoundError(f"Contract schema not found: {full_path}")
 
-        with open(full_path, "r", encoding="utf-8") as f:
+        with open(full_path, encoding="utf-8") as f:
             schema = json.load(f)
 
         self._schema_cache[schema_path] = schema
@@ -114,7 +115,7 @@ class ContractValidator:
 
         for schema_file in schemas_dir.rglob("*.json"):
             try:
-                with open(schema_file, "r", encoding="utf-8") as f:
+                with open(schema_file, encoding="utf-8") as f:
                     schema = json.load(f)
 
                 # Create resource - use auto-detect if $schema present,
@@ -277,7 +278,7 @@ class ContractValidator:
 
 
 # Global validator instance
-_validator: Optional[ContractValidator] = None
+_validator: ContractValidator | None = None
 
 
 def get_validator() -> ContractValidator:
@@ -288,7 +289,7 @@ def get_validator() -> ContractValidator:
     return _validator
 
 
-def validate_contract(func: Callable[..., T]) -> Callable[..., T]:
+def validate_contract[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Decorator to validate agent input and output against contracts.
 
@@ -349,7 +350,7 @@ def validate_contract(func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
-def validate_contract_strict(func: Callable[..., T]) -> Callable[..., T]:
+def validate_contract_strict[T](func: Callable[..., T]) -> Callable[..., T]:
     """
     Strict version of validate_contract that raises on validation failure.
 
@@ -474,7 +475,7 @@ def main():
 
     # Load data
     try:
-        with open(args.file, "r", encoding="utf-8") as f:
+        with open(args.file, encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         print(f"Error loading file: {e}")

@@ -10,14 +10,13 @@ import json
 import os
 import shutil
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 import click
 
-from agents.base import BaseAgent, AgentSpawner
-from state.machine import PipelineState, PipelinePhase, StateManager
+from agents.base import AgentSpawner, BaseAgent
+from state.machine import PipelinePhase, PipelineState, StateManager
 
 
 class OrchestratorAgent(BaseAgent):
@@ -50,7 +49,7 @@ class OrchestratorAgent(BaseAgent):
 
         # State management
         self.state_manager = StateManager()
-        self.state: Optional[PipelineState] = None
+        self.state: PipelineState | None = None
 
     async def run(self, task: dict) -> dict:
         """
@@ -102,7 +101,7 @@ class OrchestratorAgent(BaseAgent):
         )
 
         self.log.info(
-            f"Starting state-machine pipeline",
+            "Starting state-machine pipeline",
             job_id=self.state.job_id,
             associations=associations
         )
@@ -167,7 +166,7 @@ class OrchestratorAgent(BaseAgent):
 
         return True
 
-    def _get_next_phase(self, current: PipelinePhase) -> Optional[PipelinePhase]:
+    def _get_next_phase(self, current: PipelinePhase) -> PipelinePhase | None:
         """Get next phase in pipeline."""
         phase_order = [
             PipelinePhase.INIT,
@@ -565,7 +564,7 @@ class OrchestratorAgent(BaseAgent):
             self.log.info("Dry run - skipping exports")
             return True
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Export companies
         if self.state.canonical_entities or self.state.companies:
@@ -628,7 +627,7 @@ class OrchestratorAgent(BaseAgent):
         ]
 
         if directory_urls:
-            result = await self.spawner.spawn(
+            await self.spawner.spawn(
                 "monitoring.source_monitor",
                 {
                     "action": "baseline",

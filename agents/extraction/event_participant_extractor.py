@@ -7,15 +7,13 @@ and speaker information from event pages.
 """
 
 import re
-from datetime import datetime
-from typing import Optional
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
 from agents.base import BaseAgent
-from models.ontology import EventParticipant, ParticipantType, SponsorTier, Provenance
-from middleware.policy import enforce_provenance, validate_json_output, auth_pages_flagged
+from middleware.policy import auth_pages_flagged, enforce_provenance, validate_json_output
+from models.ontology import EventParticipant, ParticipantType, Provenance, SponsorTier
 
 
 class EventParticipantExtractorAgent(BaseAgent):
@@ -160,7 +158,7 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         soup: BeautifulSoup,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
     ) -> list[EventParticipant]:
         """Extract sponsors organized by tier."""
@@ -183,7 +181,7 @@ class EventParticipantExtractorAgent(BaseAgent):
         tier: SponsorTier,
         keywords: list[str],
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
     ) -> list[EventParticipant]:
         """Find sponsors for a specific tier."""
@@ -223,7 +221,7 @@ class EventParticipantExtractorAgent(BaseAgent):
         container,
         tier: SponsorTier,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
     ) -> list[EventParticipant]:
         """Extract sponsors from a container element."""
@@ -272,7 +270,7 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         soup: BeautifulSoup,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
     ) -> list[EventParticipant]:
         """Extract sponsors without tier information."""
@@ -294,7 +292,7 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         soup: BeautifulSoup,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
     ) -> list[EventParticipant]:
         """Extract exhibitors from an exhibitor list page."""
@@ -335,9 +333,9 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         row,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
-    ) -> Optional[EventParticipant]:
+    ) -> EventParticipant | None:
         """Extract exhibitor from a table row."""
         cells = row.find_all(["td", "th"])
         if len(cells) < 1:
@@ -390,9 +388,9 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         item,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
-    ) -> Optional[EventParticipant]:
+    ) -> EventParticipant | None:
         """Extract exhibitor from a list item or card."""
         # Extract company name
         name_elem = item.find(["h3", "h4", "h5", "strong", "b"])
@@ -439,7 +437,7 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         soup: BeautifulSoup,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
     ) -> list[EventParticipant]:
         """Extract speakers from a speakers page."""
@@ -462,9 +460,9 @@ class EventParticipantExtractorAgent(BaseAgent):
         self,
         elem,
         url: str,
-        event_id: Optional[str],
+        event_id: str | None,
         provenance: Provenance
-    ) -> Optional[EventParticipant]:
+    ) -> EventParticipant | None:
         """Extract speaker from an element."""
         # Extract name
         name_elem = elem.find(class_=re.compile(r'name|title', re.I))
@@ -508,7 +506,7 @@ class EventParticipantExtractorAgent(BaseAgent):
             provenance=[provenance]
         )
 
-    def _clean_company_name(self, name: str) -> Optional[str]:
+    def _clean_company_name(self, name: str) -> str | None:
         """Clean and validate company name."""
         if not name:
             return None
@@ -526,7 +524,7 @@ class EventParticipantExtractorAgent(BaseAgent):
 
         return name
 
-    def _extract_website_from_link(self, element) -> Optional[str]:
+    def _extract_website_from_link(self, element) -> str | None:
         """Extract website URL from element or parent link."""
         # Check parent link
         parent = element.find_parent("a")

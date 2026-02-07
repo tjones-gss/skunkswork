@@ -6,8 +6,8 @@ State machine and pipeline state management.
 """
 
 from state.machine import (
-    PipelineState,
     PipelinePhase,
+    PipelineState,
     StateManager,
 )
 

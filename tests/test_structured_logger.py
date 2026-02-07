@@ -6,11 +6,6 @@ Phase 2: Structured Logging Hardening
 
 import json
 import logging
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 # =============================================================================
 # TEST JSON FORMATTER

@@ -8,13 +8,11 @@ resolves duplicates, and maintains alias mappings.
 
 import re
 from collections import defaultdict
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from agents.base import BaseAgent
-from models.ontology import Company, Provenance
 from middleware.policy import validate_json_output
-from skills.common.SKILL import normalize_company_name, extract_domain
+from skills.common.SKILL import extract_domain, normalize_company_name
 
 
 class EntityResolverAgent(BaseAgent):
@@ -156,7 +154,7 @@ class EntityResolverAgent(BaseAgent):
                 canonical_entities.append(record)
 
         self.log.info(
-            f"Resolution complete",
+            "Resolution complete",
             input_records=len(records),
             canonical_entities=len(canonical_entities),
             merge_groups=len([g for g in merge_groups if len(g) > 1])

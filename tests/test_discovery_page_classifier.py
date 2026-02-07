@@ -6,9 +6,9 @@ Tests for the page classifier agent that classifies web pages into ontology type
 to determine the appropriate extraction strategy.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # TEST INITIALIZATION
@@ -728,9 +728,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting directory from many list items."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 
@@ -753,9 +754,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting directory from member class elements."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 
@@ -778,9 +780,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting member detail from single profile element."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 
@@ -802,9 +805,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting events from event class elements."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 
@@ -828,9 +832,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting sponsors from tier elements."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 
@@ -852,9 +857,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting exhibitors from booth elements."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 
@@ -875,9 +881,10 @@ class TestPageClassifierAgentAnalyzeStructure:
         """Test detecting event detail from registration form."""
         mock_config.return_value.load.return_value = {}
 
+        from bs4 import BeautifulSoup
+
         from agents.discovery.page_classifier import PageClassifierAgent
         from models.ontology import PageType
-        from bs4 import BeautifulSoup
 
         agent = PageClassifierAgent(agent_type="discovery.page_classifier")
 

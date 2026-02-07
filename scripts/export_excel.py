@@ -10,13 +10,12 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 try:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side  # noqa: F401
     from openpyxl.utils import get_column_letter
-    from openpyxl.worksheet.hyperlink import Hyperlink
+    from openpyxl.worksheet.hyperlink import Hyperlink  # noqa: F401
 except ImportError:
     print("Error: openpyxl not installed. Run: pip install openpyxl")
     sys.exit(1)
@@ -408,7 +407,7 @@ class ExcelExporter:
         ws.column_dimensions["B"].width = 15
         ws.column_dimensions["C"].width = 15
 
-        print(f"  - Data Quality Report: complete")
+        print("  - Data Quality Report: complete")
 
 
 def load_records(input_path: str) -> list[dict]:
@@ -420,7 +419,7 @@ def load_records(input_path: str) -> list[dict]:
         print(f"Error: Input file not found: {input_path}")
         sys.exit(1)
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:

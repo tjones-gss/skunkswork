@@ -6,15 +6,14 @@ Tests BaseAgent.save_to_db() and orchestrator --persist-db integration
 using SQLite in-memory.
 """
 
+from unittest.mock import patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import MagicMock, patch
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from db.connection import DatabasePool
-from db.models import Base, CompanyModel, ContactModel, EventModel
-from db.repository import CompanyRepository, ContactRepository, EventRepository
-
+from db.models import Base, CompanyModel
+from db.repository import CompanyRepository, EventRepository
 
 # ---------------------------------------------------------------------------
 # Fixtures

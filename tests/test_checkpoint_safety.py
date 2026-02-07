@@ -5,12 +5,10 @@ Phase 3: Checkpoint Safety Hardening
 """
 
 import json
-import os
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # =============================================================================
 # HELPERS
@@ -21,9 +19,9 @@ def _make_agent(tmp_path, job_id="test-job-001"):
     """Create a BaseAgent subclass for testing."""
     # Patch Config, Logger, HTTP, RateLimiter to avoid real I/O
     with patch("agents.base.Config") as mc, \
-         patch("agents.base.StructuredLogger") as ml, \
-         patch("agents.base.AsyncHTTPClient") as mh, \
-         patch("agents.base.RateLimiter") as mr:
+         patch("agents.base.StructuredLogger"), \
+         patch("agents.base.AsyncHTTPClient"), \
+         patch("agents.base.RateLimiter"):
         mc.return_value.load.return_value = {}
 
         from agents.base import BaseAgent

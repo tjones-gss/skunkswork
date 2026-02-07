@@ -6,9 +6,9 @@ Tests for the access gatekeeper agent that verifies legal and ethical access
 before crawling websites, checking robots.txt, ToS, and authentication requirements.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # TEST INITIALIZATION

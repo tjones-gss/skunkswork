@@ -5,10 +5,7 @@ NAM Intelligence Pipeline
 Detects ERP, CRM, MES, and other business software used by companies.
 """
 
-import asyncio
 import os
-import re
-from typing import Optional
 from urllib.parse import quote
 
 from bs4 import BeautifulSoup
@@ -139,7 +136,7 @@ class TechStackAgent(BaseAgent):
         detection_rate = detected / len(records) if records else 0
 
         self.log.info(
-            f"Tech stack detection complete",
+            "Tech stack detection complete",
             detected=detected,
             total=len(records),
             detection_rate=f"{detection_rate:.1%}"
@@ -152,7 +149,7 @@ class TechStackAgent(BaseAgent):
             "records_processed": len(records)
         }
 
-    async def _detect_builtwith(self, domain: str) -> Optional[dict]:
+    async def _detect_builtwith(self, domain: str) -> dict | None:
         """Detect tech stack using BuiltWith API."""
         api_key = os.getenv("BUILTWITH_API_KEY")
         if not api_key:
@@ -200,7 +197,7 @@ class TechStackAgent(BaseAgent):
 
         return None
 
-    async def _detect_fingerprint(self, domain: str) -> Optional[dict]:
+    async def _detect_fingerprint(self, domain: str) -> dict | None:
         """Detect tech stack by analyzing website source."""
         try:
             response = await self.http.get(
@@ -287,7 +284,7 @@ class TechStackAgent(BaseAgent):
 
         return None
 
-    async def _detect_job_postings(self, company_name: str) -> Optional[dict]:
+    async def _detect_job_postings(self, company_name: str) -> dict | None:
         """Detect ERP by analyzing job postings."""
         if not self.enable_indeed_scraping:
             self.log.warning("indeed_scraping_disabled", msg="Indeed scraping disabled by config; skipping")

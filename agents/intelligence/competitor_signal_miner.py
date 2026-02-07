@@ -7,20 +7,18 @@ software brands to build competitive intelligence.
 """
 
 import re
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from bs4 import BeautifulSoup
 
 from agents.base import BaseAgent
+from middleware.policy import validate_json_output
 from models.ontology import (
+    COMPETITOR_ALIASES,
     CompetitorSignal,
     CompetitorSignalType,
     Provenance,
-    TARGET_COMPETITORS,
-    COMPETITOR_ALIASES,
 )
-from middleware.policy import validate_json_output
 
 
 class CompetitorSignalMinerAgent(BaseAgent):
@@ -208,10 +206,10 @@ class CompetitorSignalMinerAgent(BaseAgent):
     def _mine_signals(
         self,
         text: str,
-        url: Optional[str],
-        source_company_id: Optional[str],
-        source_event_id: Optional[str],
-        association: Optional[str],
+        url: str | None,
+        source_company_id: str | None,
+        source_event_id: str | None,
+        association: str | None,
         provenance: Provenance
     ) -> list[CompetitorSignal]:
         """Mine text for competitor signals."""
@@ -341,7 +339,7 @@ class CompetitorSignalMinerAgent(BaseAgent):
                     competitor_totals[comp] = competitor_totals.get(comp, 0) + count
 
         self.log.info(
-            f"Batch scan complete",
+            "Batch scan complete",
             pages_scanned=len(pages),
             total_signals=len(all_signals),
             competitors_found=list(competitor_totals.keys())

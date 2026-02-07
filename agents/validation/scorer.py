@@ -5,8 +5,7 @@ NAM Intelligence Pipeline
 Assigns quality scores (0-100) to company records.
 """
 
-from datetime import datetime, timedelta, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from agents.base import BaseAgent
 
@@ -147,7 +146,7 @@ class ScorerAgent(BaseAgent):
         median_score = sorted(scores)[len(scores) // 2] if scores else 0
 
         self.log.info(
-            f"Scoring complete",
+            "Scoring complete",
             average_score=round(avg_score, 1),
             median_score=median_score,
             quality_distribution=quality_dist

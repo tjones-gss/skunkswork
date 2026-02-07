@@ -5,13 +5,10 @@ Tests external validation including DNS/MX validation,
 Google Places API verification, and name matching logic.
 """
 
-import asyncio
-import os
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # =============================================================================
 # TEST FIXTURES
@@ -23,9 +20,9 @@ def create_crossref_agent(agent_config: dict = None):
     from agents.validation.crossref import CrossRefAgent
 
     with patch("agents.base.Config") as mock_config, \
-         patch("agents.base.StructuredLogger") as mock_logger, \
-         patch("agents.base.AsyncHTTPClient") as mock_http, \
-         patch("agents.base.RateLimiter") as mock_limiter:
+         patch("agents.base.StructuredLogger"), \
+         patch("agents.base.AsyncHTTPClient"), \
+         patch("agents.base.RateLimiter"):
 
         mock_config.return_value.load.return_value = agent_config or {}
 

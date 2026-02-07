@@ -4,12 +4,10 @@ Tests for AsyncHTTPClient 5xx retry with jitter.
 Phase 1: HTTP Client Hardening
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
 
 # =============================================================================
 # HELPERS
@@ -239,7 +237,7 @@ class TestJitterAndBackoff:
             sleep_values.append(duration)
 
         with patch("asyncio.sleep", side_effect=capture_sleep):
-            response = await client._request("GET", "https://example.com/api")
+            await client._request("GET", "https://example.com/api")
 
         # All sleep durations should be <= 60
         for val in sleep_values:
@@ -292,7 +290,7 @@ class TestJitterAndBackoff:
             _make_response(200),
         ])
 
-        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with patch("asyncio.sleep", new_callable=AsyncMock):
             response = await client._request("GET", "https://example.com/api")
 
         assert response.status_code == 200

@@ -5,10 +5,10 @@ NAM Intelligence Pipeline
 Agents for validating, deduplicating, and scoring company records.
 """
 
-from .dedupe import DedupeAgent
 from .crossref import CrossRefAgent
-from .scorer import ScorerAgent
+from .dedupe import DedupeAgent
 from .entity_resolver import EntityResolverAgent
+from .scorer import ScorerAgent
 
 __all__ = [
     "DedupeAgent",

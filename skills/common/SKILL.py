@@ -13,14 +13,12 @@ import os
 import random
 import re
 import time
-from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 import yaml
-
 
 # ============================================================================
 # STATE CODES
@@ -134,7 +132,7 @@ class AsyncHTTPClient:
 
     def __init__(self, rate_limiter: RateLimiter = None):
         self.rate_limiter = rate_limiter or RateLimiter()
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -389,7 +387,7 @@ class JSONLReader:
         if not self.path.exists():
             return records
 
-        with open(self.path, "r", encoding="utf-8") as f:
+        with open(self.path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -405,7 +403,7 @@ class JSONLReader:
         if not self.path.exists():
             return
 
-        with open(self.path, "r", encoding="utf-8") as f:
+        with open(self.path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -439,7 +437,7 @@ class Config:
         if not path.exists():
             return {}
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             content = f.read()
 
         # Substitute environment variables

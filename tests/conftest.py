@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # =============================================================================
 # PATH FIXTURES
 # =============================================================================
@@ -52,9 +51,9 @@ def validator(contracts_dir):
 @pytest.fixture
 def global_validator():
     """Get the global validator instance."""
-    from contracts.validator import get_validator, _validator
     # Reset global validator for clean tests
     import contracts.validator as validator_module
+    from contracts.validator import get_validator
     validator_module._validator = None
     return get_validator()
 
@@ -299,7 +298,7 @@ def invalid_gatekeeper_input_missing_urls() -> dict:
 @pytest.fixture
 def fresh_pipeline_state():
     """Create a fresh PipelineState instance."""
-    from state.machine import PipelineState, PipelinePhase
+    from state.machine import PipelineState
     return PipelineState(
         association_codes=["PMA", "NEMA"]
     )
@@ -315,7 +314,7 @@ def state_manager(tmp_path):
 @pytest.fixture
 def populated_pipeline_state():
     """PipelineState with some data populated."""
-    from state.machine import PipelineState, PipelinePhase
+    from state.machine import PipelineState
 
     state = PipelineState(
         job_id="test-job-123",
@@ -777,7 +776,7 @@ def duplicate_company_records():
 @pytest.fixture
 def scored_company_record():
     """Company record with validation results for scorer tests."""
-    from datetime import datetime, UTC
+    from datetime import UTC
     return {
         "company_name": "Test Corp",
         "website": "https://test.com",

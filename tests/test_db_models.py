@@ -7,16 +7,15 @@ No PostgreSQL required.
 """
 
 import uuid
-from datetime import datetime, UTC
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import inspect, select, text
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from db.models import (
-    Base,
     AssociationMembershipModel,
+    Base,
     CompanyModel,
     CompetitorSignalModel,
     ContactModel,
@@ -29,7 +28,6 @@ from db.models import (
     SourceBaselineModel,
     URLQueueModel,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

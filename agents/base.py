@@ -10,25 +10,22 @@ import json
 import os
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
-
-import yaml
 
 from skills.common.SKILL import (
     AsyncHTTPClient,
+    Config,
+    JSONLWriter,
     RateLimiter,
     StructuredLogger,
-    JSONLWriter,
-    Config,
 )
 
 
 class BaseAgent(ABC):
     """
     Abstract base class for all pipeline agents.
-    
+
     Provides common functionality:
     - Configuration loading
     - Logging
@@ -36,7 +33,7 @@ class BaseAgent(ABC):
     - State management
     - Error handling
     """
-    
+
     def __init__(
         self,
         agent_type: str,
@@ -71,24 +68,24 @@ class BaseAgent(ABC):
         # Allow subclass customization
         self._kwargs = kwargs
         self._setup(**kwargs)
-    
+
     def _load_agent_config(self) -> dict:
         """Load agent-specific configuration."""
         try:
             agents_config = self.config.load("agents")
-            
+
             # Parse agent type (e.g., "extraction.html_parser" -> ["extraction", "html_parser"])
             parts = self.agent_type.split(".")
-            
+
             config = agents_config
             for part in parts:
                 config = config.get(part, {})
-            
+
             return config
         except Exception as e:
             self.log.warning(f"Could not load agent config: {e}")
             return {}
-    
+
     # API key requirements by agent type
     API_KEY_REQUIREMENTS: dict[str, list[str]] = {
         "enrichment.firmographic": ["CLEARBIT_API_KEY", "APOLLO_API_KEY"],
@@ -136,10 +133,10 @@ class BaseAgent(ABC):
     async def run(self, task: dict) -> dict:
         """
         Execute the agent's main task.
-        
+
         Args:
             task: Task configuration dictionary
-            
+
         Returns:
             Result dictionary with at minimum:
             - success: bool
@@ -147,7 +144,7 @@ class BaseAgent(ABC):
             - data: any output data
         """
         pass
-    
+
     async def execute(self, task: dict) -> dict:
         """
         Execute the agent with full lifecycle management.
@@ -155,7 +152,7 @@ class BaseAgent(ABC):
         """
         self.started_at = datetime.now(UTC)
         self.status = "running"
-        
+
         self.log.info("Agent starting", task_keys=list(task.keys()))
 
         # Check API key health before running
@@ -164,39 +161,39 @@ class BaseAgent(ABC):
         try:
             # Run pre-execution hook
             task = await self._pre_execute(task)
-            
+
             # Execute main task
             result = await self.run(task)
-            
+
             # Run post-execution hook
             result = await self._post_execute(task, result)
-            
+
             self.status = "completed"
             self.results = result
-            
+
             self.log.info(
                 "Agent completed",
                 success=result.get("success", True),
                 records_processed=result.get("records_processed", 0),
                 duration_seconds=self._get_duration()
             )
-            
+
             return result
-            
+
         except Exception as e:
             self.status = "failed"
             self.errors.append(str(e))
-            
+
             self.log.error(
                 "Agent failed",
                 error=str(e),
                 error_type=type(e).__name__,
                 duration_seconds=self._get_duration()
             )
-            
+
             # Run error hook
             error_result = await self._on_error(task, e)
-            
+
             return {
                 "success": False,
                 "error": str(e),
@@ -204,11 +201,11 @@ class BaseAgent(ABC):
                 "error_handling": error_result,
                 "records_processed": 0
             }
-        
+
         finally:
             self.completed_at = datetime.now(UTC)
             await self._cleanup()
-    
+
     async def _pre_execute(self, task: dict) -> dict:
         """Pre-execution hook. Can modify task."""
         # Add metadata
@@ -218,7 +215,7 @@ class BaseAgent(ABC):
             "started_at": self.started_at.isoformat()
         }
         return task
-    
+
     async def _post_execute(self, task: dict, result: dict) -> dict:
         """Post-execution hook. Can modify result."""
         result["_meta"] = {
@@ -228,35 +225,35 @@ class BaseAgent(ABC):
             "duration_seconds": self._get_duration()
         }
         return result
-    
+
     async def _on_error(self, task: dict, error: Exception) -> dict:
         """Error handling hook."""
         import traceback
-        
+
         return {
             "action": "logged",
             "traceback": traceback.format_exc()
         }
-    
+
     async def _cleanup(self):
         """Cleanup hook. Called after execution completes."""
         await self.http.close()
-    
+
     def _get_duration(self) -> float:
         """Get execution duration in seconds."""
         if not self.started_at:
             return 0
-        
+
         end = self.completed_at or datetime.now(UTC)
         return (end - self.started_at).total_seconds()
-    
+
     # Utility methods for subclasses
-    
+
     def load_schema(self, schema_name: str) -> dict:
         """Load an extraction schema."""
         schemas = self.config.load(f"schemas/{schema_name}")
         return schemas.get(schema_name, schemas.get("default", {}))
-    
+
     def save_records(self, records: list[dict], output_path: str) -> int:
         """Save records to JSONL file with atomic write.
 
@@ -277,7 +274,7 @@ class BaseAgent(ABC):
             self.log.warning(f"save_records failed: {e}")
             tmp_path.unlink(missing_ok=True)
             return -1
-    
+
     def load_records(self, input_path: str) -> list[dict]:
         """Load records from JSONL file."""
         from skills.common.SKILL import JSONLReader
@@ -320,7 +317,7 @@ class BaseAgent(ABC):
         except Exception as e:
             self.log.warning(f"save_to_db failed: {e}")
         return count
-    
+
     async def checkpoint(self, state: dict) -> bool:
         """Save a checkpoint for recovery using atomic write.
 
@@ -348,8 +345,8 @@ class BaseAgent(ABC):
             self.log.warning(f"Checkpoint save failed: {e}")
             tmp_path.unlink(missing_ok=True)
             return False
-    
-    def load_checkpoint(self) -> Optional[dict]:
+
+    def load_checkpoint(self) -> dict | None:
         """Load a checkpoint if it exists. Returns None on missing/corrupt files."""
         checkpoint_path = Path("data/.state") / f"{self.job_id}.checkpoint.json"
 
@@ -395,7 +392,7 @@ class DeadLetterQueue:
         if not self._file_path.exists():
             return entries
         try:
-            with open(self._file_path, "r", encoding="utf-8") as f:
+            with open(self._file_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -417,7 +414,7 @@ class AgentSpawner:
     Spawns and manages sub-agents.
     Used by the orchestrator to run parallel tasks.
     """
-    
+
     # Registry of agent classes
     AGENT_REGISTRY = {
         # Discovery agents
@@ -455,24 +452,24 @@ class AgentSpawner:
         # Monitoring agents
         "monitoring.source_monitor": "agents.monitoring.source_monitor.SourceMonitorAgent",
     }
-    
+
     def __init__(self, job_id: str = None):
         self.job_id = job_id or str(uuid.uuid4())
         self.log = StructuredLogger("spawner", self.job_id)
         self.dlq = DeadLetterQueue()
-    
+
     def _load_agent_class(self, agent_type: str):
         """Dynamically load an agent class."""
         if agent_type not in self.AGENT_REGISTRY:
             raise ValueError(f"Unknown agent type: {agent_type}")
-        
+
         module_path = self.AGENT_REGISTRY[agent_type]
         module_name, class_name = module_path.rsplit(".", 1)
-        
+
         import importlib
         module = importlib.import_module(module_name)
         return getattr(module, class_name)
-    
+
     async def spawn(
         self,
         agent_type: str,
@@ -506,7 +503,7 @@ class AgentSpawner:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.log.error(f"Agent {agent_type} timed out after {timeout}s")
             error_result = {
                 "success": False,
@@ -528,7 +525,7 @@ class AgentSpawner:
             if _push_dlq:
                 self.dlq.push(task, str(e), agent_type)
             return error_result
-    
+
     async def spawn_parallel(
         self,
         agent_type: str,
@@ -538,13 +535,13 @@ class AgentSpawner:
     ) -> list[dict]:
         """
         Spawn multiple agents in parallel.
-        
+
         Args:
             agent_type: Type of agent to spawn
             tasks: List of task configurations
             max_concurrent: Maximum concurrent agents
             timeout: Timeout per agent
-            
+
         Returns:
             List of results (in same order as tasks)
         """
@@ -552,9 +549,9 @@ class AgentSpawner:
             f"Spawning {len(tasks)} agents of type {agent_type}",
             max_concurrent=max_concurrent
         )
-        
+
         semaphore = asyncio.Semaphore(max_concurrent)
-        
+
         async def limited_spawn(task):
             async with semaphore:
                 return await self.spawn(agent_type, task, timeout, _push_dlq=False)
@@ -593,11 +590,11 @@ class AgentSpawner:
                 )
             else:
                 processed_results.append(result)
-        
+
         # Log summary
         successes = sum(1 for r in processed_results if r.get("success", False))
         total_records = sum(r.get("records_processed", 0) for r in processed_results)
-        
+
         self.log.info(
             "Parallel spawn complete",
             total=len(tasks),
@@ -605,5 +602,5 @@ class AgentSpawner:
             failures=len(tasks) - successes,
             total_records=total_records
         )
-        
+
         return processed_results

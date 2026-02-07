@@ -6,11 +6,7 @@ Unit tests for state/machine.py - Pipeline state and state manager.
 """
 
 import json
-from datetime import datetime, UTC
-from pathlib import Path
-
-import pytest
-
+from datetime import UTC, datetime
 
 # =============================================================================
 # TEST: PipelinePhase Enum
@@ -211,7 +207,7 @@ class TestPipelineStateModel:
 
     def test_pipeline_state_defaults(self):
         """PipelineState has correct default values."""
-        from state.machine import PipelineState, PipelinePhase
+        from state.machine import PipelinePhase, PipelineState
 
         state = PipelineState()
 
@@ -271,7 +267,7 @@ class TestPipelineStateModel:
 
     def test_pipeline_state_deserialization(self):
         """PipelineState can be deserialized from dict."""
-        from state.machine import PipelineState, PipelinePhase
+        from state.machine import PipelinePhase, PipelineState
 
         data = {
             "job_id": "test-job-456",
@@ -335,7 +331,7 @@ class TestStateManagerFileOperations:
         state_dir = tmp_path / "new_state_dir"
         assert not state_dir.exists()
 
-        manager = StateManager(state_dir=str(state_dir))
+        StateManager(state_dir=str(state_dir))
 
         assert state_dir.exists()
         assert state_dir.is_dir()
@@ -442,8 +438,9 @@ class TestStateManagerFileOperations:
 
     def test_get_latest_checkpoint(self, state_manager, fresh_pipeline_state):
         """get_latest_checkpoint returns most recent checkpoint."""
-        from state.machine import PipelinePhase
         import time
+
+        from state.machine import PipelinePhase
 
         # Create checkpoints
         fresh_pipeline_state.transition_to(PipelinePhase.GATEKEEPER)
@@ -485,9 +482,8 @@ class TestStateManagerFileOperations:
 
     def test_list_jobs_excludes_completed(self, state_manager):
         """list_jobs excludes completed jobs by default."""
-        from state.machine import PipelinePhase
 
-        state1 = state_manager.create_state(["PMA"], job_id="job-active")
+        state_manager.create_state(["PMA"], job_id="job-active")
         state2 = state_manager.create_state(["NEMA"], job_id="job-done")
 
         # Complete one job
@@ -501,7 +497,7 @@ class TestStateManagerFileOperations:
 
     def test_list_jobs_includes_completed_when_requested(self, state_manager):
         """list_jobs includes completed jobs when requested."""
-        state1 = state_manager.create_state(["PMA"], job_id="job-active")
+        state_manager.create_state(["PMA"], job_id="job-active")
         state2 = state_manager.create_state(["NEMA"], job_id="job-done")
 
         state2.completed_at = datetime.now(UTC)

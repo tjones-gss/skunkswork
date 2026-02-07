@@ -8,15 +8,14 @@ Monitors data sources for changes, DOM drift, and extraction failures.
 import hashlib
 import json
 import re
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from bs4 import BeautifulSoup
 
 from agents.base import BaseAgent
-from models.ontology import SourceBaseline
 from middleware.policy import crawler_only, validate_json_output
+from models.ontology import SourceBaseline
 
 
 class SourceMonitorAgent(BaseAgent):
@@ -161,7 +160,7 @@ class SourceMonitorAgent(BaseAgent):
             report_path = self._save_alerts_report(alerts)
 
         self.log.info(
-            f"Source check complete",
+            "Source check complete",
             urls_checked=len(urls),
             changes_detected=changes_detected,
             alerts=len(alerts)
@@ -433,7 +432,7 @@ class SourceMonitorAgent(BaseAgent):
         parsed = urlparse(url)
         return parsed.netloc
 
-    def _load_baseline(self, url: str) -> Optional[SourceBaseline]:
+    def _load_baseline(self, url: str) -> SourceBaseline | None:
         """Load baseline for URL."""
         url_hash = self._hash_string(url)
         path = self.baseline_dir / f"{url_hash}.json"

@@ -59,13 +59,6 @@ def sample_records():
 
 
 @pytest.fixture
-def mock_dns_resolver():
-    """Mock for dns.resolver module."""
-    mock_resolver = MagicMock()
-    return mock_resolver
-
-
-@pytest.fixture
 def google_places_success_response():
     """Mock successful Google Places API response."""
     return {
@@ -554,11 +547,72 @@ class TestCrossRefAgentRun:
 
 
 class TestCrossRefAgentLinkedIn:
-    """Tests for _validate_linkedin method."""
+    """Tests for _validate_linkedin 3-tier strategy (cache -> API -> heuristic)."""
 
     @pytest.mark.asyncio
-    async def test_linkedin_found(self, crossref_agent):
-        """LinkedIn page found returns True."""
+    async def test_api_found_200_with_url(self, crossref_agent, monkeypatch):
+        """Proxycurl 200 with URL returns True."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "url": "https://linkedin.com/company/acme",
+            "id": "12345",
+        }
+        crossref_agent.http.get = AsyncMock(return_value=mock_response)
+
+        result = await crossref_agent._validate_linkedin("acme.com")
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_api_not_found_404(self, crossref_agent, monkeypatch):
+        """Proxycurl 404 returns False and caches negative result."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        crossref_agent.http.get = AsyncMock(return_value=mock_response)
+
+        result = await crossref_agent._validate_linkedin("unknown.com")
+        assert result is False
+        # Should be cached
+        assert "unknown.com" in crossref_agent._linkedin_cache
+
+    @pytest.mark.asyncio
+    async def test_api_no_url_in_200_response(self, crossref_agent, monkeypatch):
+        """Proxycurl 200 but no URL in response returns False."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"url": None, "id": None}
+        crossref_agent.http.get = AsyncMock(return_value=mock_response)
+
+        result = await crossref_agent._validate_linkedin("no-linkedin.com")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_api_error_falls_back_to_heuristic(self, crossref_agent, monkeypatch):
+        """API exception falls through to heuristic."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        # First call (API) raises exception, second call (heuristic) succeeds
+        heuristic_response = MagicMock()
+        heuristic_response.status_code = 200
+
+        crossref_agent.http.get = AsyncMock(
+            side_effect=[Exception("API timeout"), heuristic_response]
+        )
+
+        result = await crossref_agent._validate_linkedin("acme.com")
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_no_api_key_uses_heuristic_only(self, crossref_agent, monkeypatch):
+        """Without API key, skips API and uses heuristic directly."""
+        monkeypatch.delenv("LINKEDIN_API_KEY", raising=False)
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         crossref_agent.http.get = AsyncMock(return_value=mock_response)
@@ -566,26 +620,174 @@ class TestCrossRefAgentLinkedIn:
         result = await crossref_agent._validate_linkedin("acme.com")
         assert result is True
 
+        # Should only be called once (heuristic), not twice (API + heuristic)
+        assert crossref_agent.http.get.call_count == 1
+        call_url = crossref_agent.http.get.call_args[0][0]
+        assert "linkedin.com/company/" in call_url
+
     @pytest.mark.asyncio
-    async def test_linkedin_not_found(self, crossref_agent):
-        """LinkedIn page not found returns False."""
+    async def test_cache_hit_within_ttl(self, crossref_agent, monkeypatch):
+        """Cache hit within TTL skips API and heuristic."""
+        import time
+
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        # Pre-populate cache
+        crossref_agent._linkedin_cache["cached.com"] = (
+            "https://linkedin.com/company/cached",
+            "99",
+            time.monotonic(),
+        )
+
+        crossref_agent.http.get = AsyncMock()
+
+        result = await crossref_agent._validate_linkedin("cached.com")
+        assert result is True
+        # No HTTP calls should be made
+        crossref_agent.http.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_expired_makes_fresh_api_call(self, crossref_agent, monkeypatch):
+        """Expired cache entry triggers a fresh API call."""
+        import time
+
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        # Pre-populate cache with expired entry (fetched_at far in the past)
+        crossref_agent._linkedin_cache["expired.com"] = (
+            "https://linkedin.com/company/expired",
+            "1",
+            time.monotonic() - 100000,  # Way past TTL
+        )
+
         mock_response = MagicMock()
-        mock_response.status_code = 404
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "url": "https://linkedin.com/company/expired-new",
+            "id": "2",
+        }
         crossref_agent.http.get = AsyncMock(return_value=mock_response)
 
-        result = await crossref_agent._validate_linkedin("nonexistent.com")
-        assert result is False
+        result = await crossref_agent._validate_linkedin("expired.com")
+        assert result is True
+        crossref_agent.http.get.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_linkedin_error_returns_none_and_logs(self, crossref_agent):
-        """LinkedIn error returns None and logs debug."""
-        crossref_agent.http.get = AsyncMock(side_effect=Exception("Connection error"))
+    async def test_daily_quota_exhausted_falls_to_heuristic(
+        self, crossref_agent, monkeypatch
+    ):
+        """Exhausted daily quota skips API and uses heuristic."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        crossref_agent._linkedin_api_calls_today = 200
+        crossref_agent._linkedin_daily_limit = 200
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        crossref_agent.http.get = AsyncMock(return_value=mock_response)
 
         result = await crossref_agent._validate_linkedin("acme.com")
+        assert result is True
+
+        # Should only be called once (heuristic), not for API
+        assert crossref_agent.http.get.call_count == 1
+        call_url = crossref_agent.http.get.call_args[0][0]
+        assert "linkedin.com/company/" in call_url
+
+    @pytest.mark.asyncio
+    async def test_quota_resets_on_new_day(self, crossref_agent, monkeypatch):
+        """Quota resets when date changes."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        crossref_agent._linkedin_api_calls_today = 200
+        crossref_agent._linkedin_daily_limit = 200
+        crossref_agent._linkedin_api_date = "2025-01-01"  # Yesterday
+
+        assert crossref_agent._is_linkedin_quota_available() is True
+        assert crossref_agent._linkedin_api_calls_today == 0
+
+    @pytest.mark.asyncio
+    async def test_heuristic_error_returns_none(self, crossref_agent, monkeypatch):
+        """Heuristic failure returns None."""
+        monkeypatch.delenv("LINKEDIN_API_KEY", raising=False)
+
+        crossref_agent.http.get = AsyncMock(
+            side_effect=Exception("Connection refused")
+        )
+
+        result = await crossref_agent._validate_linkedin("broken.com")
         assert result is None
-        crossref_agent.log.debug.assert_called()
-        call_args = crossref_agent.log.debug.call_args
-        assert call_args[0][0] == "linkedin_validation_failed"
+
+    @pytest.mark.asyncio
+    async def test_cache_negative_result_404(self, crossref_agent, monkeypatch):
+        """Cached 404 result returns False without HTTP calls."""
+        import time
+
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        # Cache a negative result
+        crossref_agent._linkedin_cache["notfound.com"] = (
+            None,
+            None,
+            time.monotonic(),
+        )
+
+        crossref_agent.http.get = AsyncMock()
+
+        result = await crossref_agent._validate_linkedin("notfound.com")
+        assert result is False
+        crossref_agent.http.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_api_500_falls_to_heuristic(self, crossref_agent, monkeypatch):
+        """API returning 500 falls through to heuristic."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        api_response = MagicMock()
+        api_response.status_code = 500
+
+        heuristic_response = MagicMock()
+        heuristic_response.status_code = 200
+
+        crossref_agent.http.get = AsyncMock(
+            side_effect=[api_response, heuristic_response]
+        )
+
+        result = await crossref_agent._validate_linkedin("acme.com")
+        assert result is True
+        assert crossref_agent.http.get.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_correct_api_url_params_headers(self, crossref_agent, monkeypatch):
+        """API request uses correct URL, params, and auth header."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "proxy-key-123")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "url": "https://linkedin.com/company/test",
+            "id": "1",
+        }
+        crossref_agent.http.get = AsyncMock(return_value=mock_response)
+
+        await crossref_agent._validate_linkedin("test.com")
+
+        call_args = crossref_agent.http.get.call_args
+        assert call_args[0][0] == "https://nubela.co/proxycurl/api/linkedin/company/resolve"
+        assert call_args[1]["params"] == {"company_domain": "test.com"}
+        assert call_args[1]["headers"] == {"Authorization": "Bearer proxy-key-123"}
+
+    @pytest.mark.asyncio
+    async def test_both_api_and_heuristic_fail(self, crossref_agent, monkeypatch):
+        """Both API and heuristic failing returns None."""
+        monkeypatch.setenv("LINKEDIN_API_KEY", "test-key")
+
+        crossref_agent.http.get = AsyncMock(
+            side_effect=Exception("Everything is broken")
+        )
+
+        result = await crossref_agent._validate_linkedin("broken.com")
+        assert result is None
 
 
 # =============================================================================

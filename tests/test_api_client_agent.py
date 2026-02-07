@@ -8,6 +8,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from middleware.secrets import _reset_secrets_manager
+
+
+@pytest.fixture(autouse=True)
+def reset_secrets_singleton():
+    """Reset secrets manager singleton to prevent cross-test cache pollution."""
+    _reset_secrets_manager()
+    yield
+    _reset_secrets_manager()
+
+
 # =============================================================================
 # TEST INITIALIZATION
 # =============================================================================

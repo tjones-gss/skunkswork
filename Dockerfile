@@ -81,6 +81,10 @@ COPY state/ ./state/
 # Create data and logs directories
 RUN mkdir -p data/raw data/processed data/validated data/.state data/dead_letter logs
 
+# Run as non-root user for security
+RUN useradd -m -u 1000 nam && chown -R nam:nam /app
+USER nam
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python scripts/healthcheck.py

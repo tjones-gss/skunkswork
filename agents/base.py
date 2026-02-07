@@ -42,28 +42,32 @@ class BaseAgent(ABC):
         agent_type: str,
         job_id: str = None,
         config_path: str = "config",
+        db_pool=None,
         **kwargs
     ):
         self.agent_type = agent_type
         self.job_id = job_id or str(uuid.uuid4())
         self.config_path = Path(config_path)
-        
+
         # Initialize components
         self.config = Config(config_path)
         self.log = StructuredLogger(agent_type, self.job_id)
         self.rate_limiter = RateLimiter()
         self.http = AsyncHTTPClient(self.rate_limiter)
-        
+
+        # Optional database pool (None when running without --persist-db)
+        self.db_pool = db_pool
+
         # Load agent-specific config
         self.agent_config = self._load_agent_config()
-        
+
         # State
         self.started_at = None
         self.completed_at = None
         self.status = "initialized"
         self.results = {}
         self.errors = []
-        
+
         # Allow subclass customization
         self._kwargs = kwargs
         self._setup(**kwargs)
@@ -238,9 +242,45 @@ class BaseAgent(ABC):
     def load_records(self, input_path: str) -> list[dict]:
         """Load records from JSONL file."""
         from skills.common.SKILL import JSONLReader
-        
+
         reader = JSONLReader(input_path)
         return reader.read_all()
+
+    async def save_to_db(self, records: list[dict], entity_type: str = "company") -> int:
+        """Persist records to PostgreSQL via the repository layer.
+
+        Args:
+            records: List of dicts to persist.
+            entity_type: One of "company", "contact", "event".
+
+        Returns:
+            Number of records persisted, or 0 if db_pool is None.
+        """
+        if self.db_pool is None:
+            return 0
+
+        from db.repository import CompanyRepository, ContactRepository, EventRepository
+
+        repo_map = {
+            "company": CompanyRepository.upsert,
+            "contact": ContactRepository.upsert,
+            "event": EventRepository.create,
+        }
+        upsert_fn = repo_map.get(entity_type)
+        if upsert_fn is None:
+            self.log.warning(f"Unknown entity_type for save_to_db: {entity_type}")
+            return 0
+
+        count = 0
+        try:
+            async with self.db_pool.session() as session:
+                for record in records:
+                    await upsert_fn(session, record)
+                    count += 1
+            self.log.info(f"Persisted {count} {entity_type} records to database")
+        except Exception as e:
+            self.log.warning(f"save_to_db failed: {e}")
+        return count
     
     async def checkpoint(self, state: dict) -> bool:
         """Save a checkpoint for recovery using atomic write.

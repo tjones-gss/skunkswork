@@ -1120,7 +1120,8 @@ class OrchestratorAgent(BaseAgent):
     default="INFO",
     help="Logging level",
 )
-def main(mode, associations, enrichment, validation, dry_run, job_id, resume, log_level):
+@click.option("--persist-db", is_flag=True, help="Also persist results to PostgreSQL")
+def main(mode, associations, enrichment, validation, dry_run, job_id, resume, log_level, persist_db):
     """
     NAM Competitive Intelligence Pipeline Orchestrator
 
@@ -1138,11 +1139,26 @@ def main(mode, associations, enrichment, validation, dry_run, job_id, resume, lo
     if dry_run:
         click.echo("DRY RUN - no data will be saved")
 
+    # Optionally connect to PostgreSQL
+    db_pool = None
+    if persist_db:
+        import os as _os
+        db_url = _os.getenv("DATABASE_URL")
+        if not db_url:
+            click.echo(click.style("ERROR: --persist-db requires DATABASE_URL env var", fg="red"))
+            raise SystemExit(1)
+        click.echo("Database persistence enabled")
+
+        from db.connection import DatabasePool
+        db_pool = DatabasePool(db_url)
+        asyncio.run(db_pool.init())
+
     import logging as _logging
 
     orchestrator = OrchestratorAgent(
         agent_type="orchestrator",
         job_id=job_id,
+        db_pool=db_pool,
         mode=mode,
         associations=list(associations),
         dry_run=dry_run,
@@ -1158,6 +1174,10 @@ def main(mode, associations, enrichment, validation, dry_run, job_id, resume, lo
     }
 
     result = asyncio.run(orchestrator.execute(task))
+
+    # Cleanup DB pool
+    if db_pool is not None:
+        asyncio.run(db_pool.close())
 
     if result.get("success"):
         click.echo(click.style("\n[OK] Pipeline completed successfully", fg="green"))

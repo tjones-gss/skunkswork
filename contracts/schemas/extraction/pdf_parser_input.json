@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/pdf_parser_input.json",
+  "title": "PDFParserInput",
+  "description": "Input contract for PDFParserAgent",
+  "type": "object",
+  "properties": {
+    "pdf_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_path": { "type": "string" },
+          "url": { "type": ["string", "null"], "format": "uri", "description": "Source URL if downloaded" },
+          "document_type": {
+            "type": "string",
+            "enum": ["member_directory", "exhibitor_list", "sponsor_list", "attendee_list", "annual_report", "other"]
+          }
+        },
+        "required": ["file_path", "document_type"]
+      },
+      "minItems": 1
+    },
+    "association_code": {
+      "type": "string"
+    },
+    "use_ocr": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use OCR for scanned PDFs"
+    },
+    "extract_tables": {
+      "type": "boolean",
+      "default": true,
+      "description": "Extract tabular data"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["pdf_files", "association_code"],
+  "additionalProperties": false
+}

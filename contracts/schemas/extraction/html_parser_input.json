@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/html_parser_input.json",
+  "title": "HTMLParserInput",
+  "description": "Input contract for HTMLParserAgent (member directory and detail pages)",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "content_path": { "type": "string" },
+          "html": { "type": ["string", "null"] },
+          "page_type": {
+            "type": "string",
+            "enum": ["MEMBER_DIRECTORY", "MEMBER_DETAIL"]
+          }
+        },
+        "required": ["url", "page_type"]
+      },
+      "minItems": 1
+    },
+    "association_code": {
+      "type": "string"
+    },
+    "schema_name": {
+      "type": ["string", "null"],
+      "description": "Extraction schema to use (defaults to association-specific)"
+    },
+    "extract_links": {
+      "type": "boolean",
+      "default": true,
+      "description": "Extract links to member detail pages"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["pages", "association_code"],
+  "additionalProperties": false
+}

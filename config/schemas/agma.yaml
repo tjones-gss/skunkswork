@@ -1,0 +1,63 @@
+# AGMA (American Gear Manufacturers Association) Extraction Schema
+# Directory URL: https://agma.org/membership/member-list
+
+agma:
+  extends: default
+
+  # AGMA uses an alphabetical list directory
+  list_container: ".member-list, .members-directory"
+  list_item: ".member-entry, .member-item, li"
+
+  company_name:
+    selectors:
+      - ".member-company-name"
+      - ".company-name"
+      - "a.member-link"
+      - "strong"
+    required: true
+
+  website:
+    selectors:
+      - ".member-website a"
+      - "a[href*='http']:not([href*='agma.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".member-city"
+      - ".address .city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".member-state"
+      - ".address .state"
+    parser: "state_code"
+
+  country:
+    selectors:
+      - ".member-country"
+      - ".address .country"
+    default: "United States"
+
+  phone:
+    selectors:
+      - ".member-phone"
+      - ".contact-phone"
+    parser: "phone"
+
+  # AGMA-specific: gear types
+  gear_types:
+    selectors:
+      - ".gear-types"
+      - ".product-types"
+
+  membership_tier:
+    selectors:
+      - ".membership-category"
+      - ".member-type"
+    mapping:
+      "Manufacturer": "Manufacturer"
+      "Associate": "Associate"
+      "Affiliate": "Affiliate"

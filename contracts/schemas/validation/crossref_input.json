@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/crossref_input.json",
+  "title": "CrossRefInput",
+  "description": "Input contract for CrossRefAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "minItems": 1,
+      "description": "Companies to cross-reference"
+    },
+    "validation_checks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "domain_exists",
+          "domain_resolves",
+          "email_domain_match",
+          "address_valid",
+          "phone_valid",
+          "company_name_on_website"
+        ]
+      },
+      "default": ["domain_exists", "domain_resolves"],
+      "description": "Validation checks to perform"
+    },
+    "external_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["google_places", "linkedin", "dnb", "sec"]
+      },
+      "description": "External sources to cross-reference against"
+    },
+    "flag_suspicious": {
+      "type": "boolean",
+      "default": true,
+      "description": "Flag records that fail validation"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["companies"],
+  "additionalProperties": false
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/contact.json",
+  "title": "Contact",
+  "description": "Contact information for a person",
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Full name of contact"
+    },
+    "first_name": {
+      "type": ["string", "null"]
+    },
+    "last_name": {
+      "type": ["string", "null"]
+    },
+    "title": {
+      "type": ["string", "null"],
+      "description": "Job title"
+    },
+    "department": {
+      "type": ["string", "null"]
+    },
+    "seniority": {
+      "type": ["string", "null"],
+      "description": "Seniority level (C-Level, VP, Director, Manager, etc.)"
+    },
+    "email": {
+      "type": ["string", "null"],
+      "format": "email"
+    },
+    "email_verified": {
+      "type": "boolean",
+      "default": false
+    },
+    "phone": {
+      "type": ["string", "null"]
+    },
+    "linkedin_url": {
+      "type": ["string", "null"],
+      "format": "uri"
+    },
+    "data_source": {
+      "type": ["string", "null"],
+      "description": "Source of contact data (apollo, hunter, manual, etc.)"
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.5
+    }
+  },
+  "required": ["full_name"],
+  "additionalProperties": false
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/intelligence/competitor_signal_miner_input.json",
+  "title": "CompetitorSignalMinerInput",
+  "description": "Input contract for CompetitorSignalMinerAgent",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "content_path": { "type": "string" },
+          "html": { "type": ["string", "null"] },
+          "page_type": { "type": ["string", "null"] }
+        },
+        "required": ["url"]
+      },
+      "description": "Pages to scan for competitor mentions"
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies to scan tech stack/descriptions"
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "../core/event.json" },
+      "description": "Events to analyze"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" },
+      "description": "Participants to scan for competitor sponsorships"
+    },
+    "target_competitors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Competitor names to look for (defaults to TARGET_COMPETITORS)"
+    },
+    "signal_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "SPONSOR",
+          "EXHIBITOR",
+          "MEMBER_USAGE",
+          "SPEAKER_BIO",
+          "PARTNER_INTEGRATION",
+          "JOB_POSTING",
+          "CASE_STUDY",
+          "PRESS_RELEASE"
+        ]
+      },
+      "description": "Types of signals to detect"
+    },
+    "association_code": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

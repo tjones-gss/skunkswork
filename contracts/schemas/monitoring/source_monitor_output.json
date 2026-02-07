@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/monitoring/source_monitor_output.json",
+  "title": "SourceMonitorOutput",
+  "description": "Output contract for SourceMonitorAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "baselines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "domain": { "type": "string" },
+          "page_structure_hash": { "type": "string" },
+          "selector_hashes": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "expected_item_count": { "type": ["integer", "null"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        },
+        "required": ["url", "page_structure_hash"]
+      },
+      "description": "Baseline snapshots created/updated"
+    },
+    "drift_detected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "drift_type": {
+            "type": "string",
+            "enum": ["structure_changed", "selector_missing", "item_count_changed", "content_changed"]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "details": { "type": "string" },
+          "old_value": { "type": ["string", "integer", "null"] },
+          "new_value": { "type": ["string", "integer", "null"] },
+          "detected_at": { "type": "string", "format": "date-time" }
+        },
+        "required": ["url", "drift_type", "severity"]
+      },
+      "description": "Drift events detected"
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "alert_type": { "type": "string" },
+          "message": { "type": "string" },
+          "url": { "type": "string" },
+          "severity": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["alert_type", "message"]
+      },
+      "description": "Alerts generated"
+    },
+    "monitor_stats": {
+      "type": "object",
+      "properties": {
+        "urls_checked": { "type": "integer" },
+        "baselines_created": { "type": "integer" },
+        "baselines_updated": { "type": "integer" },
+        "drift_events": { "type": "integer" },
+        "alerts_generated": { "type": "integer" }
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed"],
+  "additionalProperties": false
+}

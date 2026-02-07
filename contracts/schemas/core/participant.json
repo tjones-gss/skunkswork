@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/participant.json",
+  "title": "EventParticipant",
+  "description": "Participant in an event (sponsor, exhibitor, attendee, speaker)",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier"
+    },
+    "event_id": {
+      "type": "string",
+      "description": "Event this participant belongs to"
+    },
+    "company_id": {
+      "type": ["string", "null"],
+      "description": "Linked company if resolved"
+    },
+    "participant_type": {
+      "type": "string",
+      "enum": ["SPONSOR", "EXHIBITOR", "ATTENDEE", "SPEAKER", "ORGANIZER"]
+    },
+    "company_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Company name as listed"
+    },
+    "company_website": {
+      "type": ["string", "null"],
+      "format": "uri"
+    },
+    "sponsor_tier": {
+      "type": ["string", "null"],
+      "enum": ["PLATINUM", "GOLD", "SILVER", "BRONZE", "PARTNER", "MEDIA", "OTHER", null]
+    },
+    "booth_number": {
+      "type": ["string", "null"]
+    },
+    "booth_category": {
+      "type": ["string", "null"]
+    },
+    "speaker_name": {
+      "type": ["string", "null"]
+    },
+    "speaker_title": {
+      "type": ["string", "null"]
+    },
+    "presentation_title": {
+      "type": ["string", "null"]
+    },
+    "provenance": {
+      "type": "array",
+      "items": { "$ref": "./provenance.json" },
+      "default": []
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["event_id", "participant_type", "company_name"],
+  "additionalProperties": false
+}

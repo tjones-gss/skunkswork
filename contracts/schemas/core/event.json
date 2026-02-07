@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/event.json",
+  "title": "Event",
+  "description": "Event entity for conferences, trade shows, webinars, etc.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Event title"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "CONFERENCE",
+        "TRADE_SHOW",
+        "WEBINAR",
+        "WORKSHOP",
+        "NETWORKING",
+        "TRAINING",
+        "ANNUAL_MEETING",
+        "OTHER"
+      ],
+      "default": "OTHER"
+    },
+    "description": {
+      "type": ["string", "null"]
+    },
+    "start_date": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "end_date": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "registration_deadline": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "venue": {
+      "type": ["string", "null"]
+    },
+    "city": {
+      "type": ["string", "null"]
+    },
+    "state": {
+      "type": ["string", "null"]
+    },
+    "country": {
+      "type": "string",
+      "default": "United States"
+    },
+    "is_virtual": {
+      "type": "boolean",
+      "default": false
+    },
+    "event_url": {
+      "type": ["string", "null"],
+      "format": "uri"
+    },
+    "registration_url": {
+      "type": ["string", "null"],
+      "format": "uri"
+    },
+    "organizer_name": {
+      "type": ["string", "null"]
+    },
+    "organizer_association": {
+      "type": ["string", "null"],
+      "description": "Association code"
+    },
+    "expected_attendees": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "exhibitor_count": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "sponsor_count": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "provenance": {
+      "type": "array",
+      "items": { "$ref": "./provenance.json" },
+      "default": []
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["title"],
+  "additionalProperties": false
+}

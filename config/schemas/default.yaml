@@ -1,0 +1,93 @@
+# Default Extraction Schema
+# NAM Intelligence Pipeline
+# Base schema with common selectors for all associations
+
+default:
+  company_name:
+    selectors:
+      - "h1.company-name"
+      - "h2.member-title"
+      - ".profile-header h1"
+      - ".member-name"
+      - ".company-title"
+      - "h1"
+    required: true
+
+  website:
+    selectors:
+      - "a[rel='external']"
+      - ".company-website a"
+      - "a.website-link"
+      - ".website a"
+      - "a[href*='http']:not([href*='facebook']):not([href*='linkedin']):not([href*='twitter'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".city"
+      - "span[itemprop='addressLocality']"
+      - ".location .city"
+      - ".address-city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".state"
+      - "span[itemprop='addressRegion']"
+      - ".location .state"
+      - ".address-state"
+    parser: "state_code"
+
+  country:
+    selectors:
+      - ".country"
+      - "span[itemprop='addressCountry']"
+      - ".location .country"
+    default: "United States"
+
+  phone:
+    selectors:
+      - ".phone"
+      - "a[href^='tel:']"
+      - "span[itemprop='telephone']"
+      - ".contact-phone"
+    parser: "phone"
+
+  email:
+    selectors:
+      - "a[href^='mailto:']"
+      - ".email"
+      - "span[itemprop='email']"
+    extract: "href"
+    parser: "email"
+
+  membership_tier:
+    selectors:
+      - ".membership-level"
+      - ".tier-badge"
+      - ".member-type"
+      - ".membership-type"
+    enum:
+      - "Platinum"
+      - "Gold"
+      - "Silver"
+      - "Bronze"
+      - "Associate"
+      - "Full"
+      - "Regular"
+      - "New"
+
+  member_since:
+    selectors:
+      - ".member-since"
+      - ".joined-date"
+      - ".membership-date"
+    parser: "year"
+
+  description:
+    selectors:
+      - ".company-description"
+      - ".about-company"
+      - ".member-description"
+      - "p.description"

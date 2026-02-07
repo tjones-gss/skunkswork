@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/export/export_activation_output.json",
+  "title": "ExportActivationOutput",
+  "description": "Output contract for ExportActivationAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "export_type": { "type": "string" },
+          "format": { "type": "string" },
+          "file_path": { "type": "string" },
+          "record_count": { "type": "integer" },
+          "file_size_bytes": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" }
+        },
+        "required": ["export_type", "format", "file_path", "record_count"]
+      },
+      "description": "Export files generated"
+    },
+    "export_stats": {
+      "type": "object",
+      "properties": {
+        "total_companies_exported": { "type": "integer" },
+        "total_contacts_exported": { "type": "integer" },
+        "total_events_exported": { "type": "integer" },
+        "files_created": { "type": "integer" },
+        "total_size_bytes": { "type": "integer" },
+        "by_quality_grade": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "provenance_summary": {
+      "type": "object",
+      "properties": {
+        "associations_covered": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "extraction_date_range": {
+          "type": "object",
+          "properties": {
+            "earliest": { "type": "string", "format": "date-time" },
+            "latest": { "type": "string", "format": "date-time" }
+          }
+        },
+        "data_sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "exports"],
+  "additionalProperties": false
+}

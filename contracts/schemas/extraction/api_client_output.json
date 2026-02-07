@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/api_client_output.json",
+  "title": "APIClientOutput",
+  "description": "Output contract for APIClientAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "../core/event.json" }
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" }
+    },
+    "api_calls_made": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pages_fetched": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Pagination pages fetched"
+    },
+    "rate_limited": {
+      "type": "boolean",
+      "default": false
+    },
+    "api_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "endpoint": { "type": "string" },
+          "status_code": { "type": "integer" },
+          "error": { "type": "string" }
+        },
+        "required": ["endpoint", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed"],
+  "additionalProperties": false
+}

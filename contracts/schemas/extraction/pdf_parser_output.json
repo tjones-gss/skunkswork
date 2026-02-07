@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/pdf_parser_output.json",
+  "title": "PDFParserOutput",
+  "description": "Output contract for PDFParserAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "../core/event.json" }
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" }
+    },
+    "files_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pages_scanned": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tables_extracted": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ocr_used": {
+      "type": "boolean"
+    },
+    "extraction_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_path": { "type": "string" },
+          "page": { "type": ["integer", "null"] },
+          "error": { "type": "string" }
+        },
+        "required": ["file_path", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed"],
+  "additionalProperties": false
+}

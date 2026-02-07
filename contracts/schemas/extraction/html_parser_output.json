@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/html_parser_output.json",
+  "title": "HTMLParserOutput",
+  "description": "Output contract for HTMLParserAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Extracted company records"
+    },
+    "member_detail_urls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Links to member detail pages (from directory pages)"
+    },
+    "pages_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "extraction_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "error": { "type": "string" },
+          "field": { "type": ["string", "null"] }
+        },
+        "required": ["url", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies"],
+  "additionalProperties": false
+}

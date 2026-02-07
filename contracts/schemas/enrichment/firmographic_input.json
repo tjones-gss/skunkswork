@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/enrichment/firmographic_input.json",
+  "title": "FirmographicInput",
+  "description": "Input contract for FirmographicAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "company_name": { "type": "string" },
+          "domain": { "type": ["string", "null"] },
+          "website": { "type": ["string", "null"] },
+          "city": { "type": ["string", "null"] },
+          "state": { "type": ["string", "null"] },
+          "country": { "type": ["string", "null"] }
+        },
+        "required": ["id", "company_name"]
+      },
+      "minItems": 1,
+      "description": "Companies to enrich"
+    },
+    "enrichment_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["clearbit", "apollo", "zoominfo", "google_places", "dnb"]
+      },
+      "default": ["clearbit"],
+      "description": "APIs to use for enrichment"
+    },
+    "fields_to_enrich": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "employee_count",
+          "revenue",
+          "year_founded",
+          "industry",
+          "naics_code",
+          "sic_code",
+          "description",
+          "linkedin_url",
+          "location"
+        ]
+      },
+      "description": "Specific fields to enrich (default: all)"
+    },
+    "skip_if_complete": {
+      "type": "boolean",
+      "default": true,
+      "description": "Skip records that already have firmographic data"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["companies"],
+  "additionalProperties": false
+}

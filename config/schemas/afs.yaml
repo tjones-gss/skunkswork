@@ -1,0 +1,68 @@
+# AFS (American Foundry Society) Extraction Schema
+# Directory URL: https://afsinc.org/membership/member-directory
+
+afs:
+  extends: default
+
+  # AFS member directory
+  list_container: ".member-directory, .membership-listing"
+  list_item: ".member-card, .member-entry"
+
+  company_name:
+    selectors:
+      - ".member-name"
+      - ".company-name"
+      - "h4"
+      - "a.member-link"
+    required: true
+
+  website:
+    selectors:
+      - ".member-website a"
+      - "a[href*='http']:not([href*='afsinc.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".member-city"
+      - ".address .city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".member-state"
+      - ".address .state"
+    parser: "state_code"
+
+  phone:
+    selectors:
+      - ".member-phone"
+      - ".contact .phone"
+    parser: "phone"
+
+  # AFS-specific: foundry capabilities
+  foundry_type:
+    selectors:
+      - ".foundry-type"
+      - ".casting-type"
+
+  metals:
+    selectors:
+      - ".metals-cast"
+      - ".materials"
+
+  processes:
+    selectors:
+      - ".casting-processes"
+      - ".molding-processes"
+
+  membership_tier:
+    selectors:
+      - ".membership-category"
+      - ".member-type"
+    mapping:
+      "Foundry": "Foundry"
+      "Supplier": "Supplier"
+      "Corporate": "Corporate"
+      "Associate": "Associate"

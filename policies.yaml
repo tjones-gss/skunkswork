@@ -1,0 +1,6 @@
+rules:
+  - no_agent_fetches_pages_except_crawler
+  - no_agent_writes_data_except_edit_agents
+  - provenance_required_for_all_records
+  - auth_pages_must_be_flagged_not_scraped
+  - outputs_must_be_valid_json

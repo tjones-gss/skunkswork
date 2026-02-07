@@ -1,0 +1,76 @@
+associations:
+  PMA:
+    name: "Precision Metalforming Association"
+    url: "https://pma.org"
+    directory_url: "https://pma.org/directory/results.asp?n=2000"
+    expected_members: 1134
+    priority: "high"
+    schema: "pma"
+    
+  NEMA:
+    name: "National Electrical Manufacturers Association"
+    url: "https://makeitelectric.org"
+    directory_url: "https://makeitelectric.org/membership/membership-directory"
+    expected_members: 300
+    priority: "high"
+    erp_competition: "none"
+    
+  SOCMA:
+    name: "Society of Chemical Manufacturers & Affiliates"
+    url: "https://socma.org"
+    directory_url: "https://socma.org/socma-membership/membership-list"
+    expected_members: 148
+    priority: "high"
+    
+  AIA:
+    name: "Aerospace Industries Association"
+    url: "https://aia-aerospace.org"
+    directory_url: "https://aia-aerospace.org/membership/our-members"
+    expected_members: 268
+    priority: "medium"
+    
+  AGMA:
+    name: "American Gear Manufacturers Association"
+    url: "https://agma.org"
+    directory_url: "https://agma.org/membership/member-list"
+    expected_members: 495
+    priority: "high"
+    erp_competition: "none"
+    
+  NTMA:
+    name: "National Tooling & Machining Association"
+    url: "https://ntma.org"
+    directory_url: "https://ntma.org/membership/member-directory"
+    expected_members: 1400
+    priority: "medium"
+    
+  PMPA:
+    name: "Precision Machined Products Association"
+    url: "https://pmpa.org"
+    directory_url: "https://pmpa.org/membership/find-a-member"
+    expected_members: 350
+    priority: "medium"
+
+  FIA:
+    name: "Forging Industry Association"
+    url: "https://forging.org"
+    directory_url: "https://forging.org/members"
+    expected_members: 150
+    priority: "medium"
+    schema: "fia"
+
+  NADCA:
+    name: "North American Die Casting Association"
+    url: "https://diecasting.org"
+    directory_url: "https://diecasting.org/membership/member-directory"
+    expected_members: 300
+    priority: "medium"
+    schema: "nadca"
+
+  AFS:
+    name: "American Foundry Society"
+    url: "https://afsinc.org"
+    directory_url: "https://afsinc.org/membership/member-directory"
+    expected_members: 500
+    priority: "medium"
+    schema: "afs"

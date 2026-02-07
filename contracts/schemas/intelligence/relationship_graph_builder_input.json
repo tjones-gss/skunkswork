@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/intelligence/relationship_graph_builder_input.json",
+  "title": "RelationshipGraphBuilderInput",
+  "description": "Input contract for RelationshipGraphBuilderAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies to add as nodes"
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "../core/event.json" },
+      "description": "Events to add as nodes"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" },
+      "description": "Participants to create edges from"
+    },
+    "competitor_signals": {
+      "type": "array",
+      "items": { "$ref": "../core/competitor_signal.json" },
+      "description": "Competitor signals to create edges from"
+    },
+    "associations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "member_company_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["code", "name"]
+      },
+      "description": "Associations to add as nodes with membership edges"
+    },
+    "edge_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ASSOCIATION_HAS_MEMBER",
+          "ASSOCIATION_HOSTS_EVENT",
+          "EVENT_HAS_PARTICIPANT",
+          "EVENT_HAS_EXHIBITOR",
+          "EVENT_HAS_SPONSOR",
+          "ENTITY_MENTIONED_COMPETITOR",
+          "COMPANY_USES_TECHNOLOGY"
+        ]
+      },
+      "description": "Edge types to create"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

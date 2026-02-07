@@ -1,0 +1,49 @@
+# NEMA (National Electrical Manufacturers Association) Extraction Schema
+# Directory URL: https://makeitelectric.org/membership/membership-directory
+
+nema:
+  extends: default
+
+  # NEMA uses a card-based directory
+  list_container: ".membership-directory"
+  list_item: ".member-card, .company-card"
+
+  company_name:
+    selectors:
+      - ".member-card h3"
+      - ".company-name"
+      - ".member-title"
+      - "h3"
+    required: true
+
+  website:
+    selectors:
+      - ".member-card a[href*='http']:not([href*='makeitelectric'])"
+      - ".company-website"
+      - "a.external-link"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".location .city"
+      - ".member-location"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".location .state"
+      - ".member-state"
+    parser: "state_code"
+
+  description:
+    selectors:
+      - ".member-description"
+      - ".company-about"
+      - "p"
+
+  # NEMA-specific: product sections
+  product_sections:
+    selectors:
+      - ".product-sections"
+      - ".member-sections"

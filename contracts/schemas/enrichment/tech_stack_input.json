@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/enrichment/tech_stack_input.json",
+  "title": "TechStackInput",
+  "description": "Input contract for TechStackAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "company_name": { "type": "string" },
+          "domain": { "type": ["string", "null"] },
+          "website": { "type": ["string", "null"] }
+        },
+        "required": ["id", "company_name"]
+      },
+      "minItems": 1,
+      "description": "Companies to detect tech stack for"
+    },
+    "detection_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["builtwith", "wappalyzer", "similartech", "website_analysis"]
+      },
+      "default": ["builtwith"],
+      "description": "Tech detection services to use"
+    },
+    "technology_categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["erp", "crm", "ecommerce", "analytics", "marketing", "hosting", "cms", "all"]
+      },
+      "default": ["erp", "crm"],
+      "description": "Technology categories to focus on"
+    },
+    "detect_competitors": {
+      "type": "boolean",
+      "default": true,
+      "description": "Flag competitor ERP/CRM systems"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["companies"],
+  "additionalProperties": false
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/access_gatekeeper_input.json",
+  "title": "AccessGatekeeperInput",
+  "description": "Input contract for AccessGatekeeperAgent",
+  "type": "object",
+  "properties": {
+    "urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "minItems": 1,
+      "description": "URLs to check for access permission"
+    },
+    "association_code": {
+      "type": ["string", "null"],
+      "description": "Association code for context"
+    },
+    "check_robots": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to check robots.txt"
+    },
+    "check_tos": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to review Terms of Service"
+    },
+    "check_auth": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to detect authentication requirements"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["urls"],
+  "additionalProperties": false
+}

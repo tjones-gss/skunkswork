@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/crossref_output.json",
+  "title": "CrossRefOutput",
+  "description": "Output contract for CrossRefAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies with validation results"
+    },
+    "validation_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company_id": { "type": "string" },
+          "checks_passed": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "checks_failed": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "is_suspicious": { "type": "boolean" },
+          "confidence_adjustment": { "type": "number" }
+        },
+        "required": ["company_id"]
+      }
+    },
+    "crossref_stats": {
+      "type": "object",
+      "properties": {
+        "total_checked": { "type": "integer" },
+        "all_passed": { "type": "integer" },
+        "some_failed": { "type": "integer" },
+        "flagged_suspicious": { "type": "integer" },
+        "by_check": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "passed": { "type": "integer" },
+              "failed": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies"],
+  "additionalProperties": false
+}

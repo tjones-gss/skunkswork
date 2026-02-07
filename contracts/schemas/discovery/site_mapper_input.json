@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/site_mapper_input.json",
+  "title": "SiteMapperInput",
+  "description": "Input contract for SiteMapperAgent",
+  "type": "object",
+  "properties": {
+    "seed_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Starting URL for site mapping"
+    },
+    "association_code": {
+      "type": "string",
+      "description": "Association code"
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3,
+      "description": "Maximum crawl depth"
+    },
+    "max_urls": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000,
+      "default": 500,
+      "description": "Maximum URLs to discover"
+    },
+    "focus_patterns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "URL patterns to prioritize (regex)"
+    },
+    "exclude_patterns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "URL patterns to exclude (regex)"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["seed_url", "association_code"],
+  "additionalProperties": false
+}

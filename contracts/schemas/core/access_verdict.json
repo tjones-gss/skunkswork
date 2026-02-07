@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/access_verdict.json",
+  "title": "AccessVerdict",
+  "description": "Result of access gatekeeper check",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "is_allowed": {
+      "type": "boolean",
+      "description": "Whether crawling is permitted"
+    },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "robots_txt_exists": {
+      "type": "boolean",
+      "default": false
+    },
+    "robots_txt_allows": {
+      "type": "boolean",
+      "default": true
+    },
+    "crawl_delay": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "requires_auth": {
+      "type": "boolean",
+      "default": false
+    },
+    "auth_type": {
+      "type": ["string", "null"],
+      "enum": ["login", "paywall", "api_key", null]
+    },
+    "suggested_rate": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0.5,
+      "description": "Requests per second"
+    },
+    "daily_limit": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "tos_reviewed": {
+      "type": "boolean",
+      "default": false
+    },
+    "tos_allows_crawling": {
+      "type": ["boolean", "null"]
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["url", "domain", "is_allowed"],
+  "additionalProperties": false
+}

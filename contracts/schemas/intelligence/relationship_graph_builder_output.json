@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/intelligence/relationship_graph_builder_output.json",
+  "title": "RelationshipGraphBuilderOutput",
+  "description": "Output contract for RelationshipGraphBuilderAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "entity_type": {
+            "type": "string",
+            "enum": ["Association", "Company", "Event", "Person", "Competitor"]
+          },
+          "name": { "type": "string" },
+          "properties": { "type": "object" }
+        },
+        "required": ["id", "entity_type", "name"]
+      },
+      "description": "Graph nodes created"
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "source_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "relationship_type": { "type": "string" },
+          "properties": { "type": "object" },
+          "confidence": { "type": "number" }
+        },
+        "required": ["id", "source_id", "target_id", "relationship_type"]
+      },
+      "description": "Graph edges created"
+    },
+    "graph_stats": {
+      "type": "object",
+      "properties": {
+        "total_nodes": { "type": "integer" },
+        "total_edges": { "type": "integer" },
+        "nodes_by_type": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        },
+        "edges_by_type": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        },
+        "avg_connections_per_company": { "type": "number" },
+        "companies_with_competitor_edge": { "type": "integer" }
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "nodes", "edges"],
+  "additionalProperties": false
+}

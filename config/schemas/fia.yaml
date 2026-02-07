@@ -1,0 +1,58 @@
+# FIA (Forging Industry Association) Extraction Schema
+# Directory URL: https://forging.org/members
+
+fia:
+  extends: default
+
+  # FIA member directory
+  list_container: ".members-list, .member-directory"
+  list_item: ".member-item, .member-listing"
+
+  company_name:
+    selectors:
+      - ".member-name"
+      - ".company-name"
+      - "h4"
+      - "a.member-link"
+    required: true
+
+  website:
+    selectors:
+      - ".member-website a"
+      - "a[href*='http']:not([href*='forging.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".member-city"
+      - ".location .city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".member-state"
+      - ".location .state"
+    parser: "state_code"
+
+  phone:
+    selectors:
+      - ".member-phone"
+      - ".contact .phone"
+    parser: "phone"
+
+  # FIA-specific: forging capabilities
+  forging_types:
+    selectors:
+      - ".forging-types"
+      - ".forging-processes"
+
+  materials:
+    selectors:
+      - ".materials"
+      - ".alloys"
+
+  industries_served:
+    selectors:
+      - ".industries"
+      - ".markets"

@@ -1,0 +1,59 @@
+# AIA (Aerospace Industries Association) Extraction Schema
+# Directory URL: https://aia-aerospace.org/membership/our-members
+
+aia:
+  extends: default
+
+  # AIA uses a card/grid layout
+  list_container: ".members-grid, .member-list"
+  list_item: ".member-card, .member-item"
+
+  company_name:
+    selectors:
+      - ".member-card h3"
+      - ".member-name"
+      - ".company-title"
+      - "h3"
+    required: true
+
+  website:
+    selectors:
+      - ".member-card a[href*='http']:not([href*='aia-aerospace'])"
+      - ".company-website"
+      - "a.website"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".member-location .city"
+      - ".headquarters-city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".member-location .state"
+      - ".headquarters-state"
+    parser: "state_code"
+
+  description:
+    selectors:
+      - ".member-description"
+      - ".company-description"
+      - "p"
+
+  # AIA-specific fields
+  aerospace_sector:
+    selectors:
+      - ".sector"
+      - ".aerospace-category"
+
+  membership_tier:
+    selectors:
+      - ".membership-level"
+      - ".member-type"
+    mapping:
+      "Premier": "Premier"
+      "Full": "Full"
+      "Associate": "Associate"
+      "Affiliate": "Affiliate"

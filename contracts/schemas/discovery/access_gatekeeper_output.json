@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/access_gatekeeper_output.json",
+  "title": "AccessGatekeeperOutput",
+  "description": "Output contract for AccessGatekeeperAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "verdicts": {
+      "type": "array",
+      "items": { "$ref": "../core/access_verdict.json" },
+      "description": "Access verdicts for each URL"
+    },
+    "allowed_urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "description": "URLs that passed access check"
+    },
+    "blocked_urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "description": "URLs that failed access check"
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "verdicts"],
+  "additionalProperties": false
+}

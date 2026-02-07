@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/enrichment/tech_stack_output.json",
+  "title": "TechStackOutput",
+  "description": "Output contract for TechStackAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies with tech stack data"
+    },
+    "competitor_signals": {
+      "type": "array",
+      "items": { "$ref": "../core/competitor_signal.json" },
+      "description": "Competitor ERP/CRM signals detected"
+    },
+    "tech_stack_stats": {
+      "type": "object",
+      "properties": {
+        "total_input": { "type": "integer" },
+        "detected": { "type": "integer" },
+        "no_domain": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "competitor_erp_found": { "type": "integer" },
+        "competitor_crm_found": { "type": "integer" }
+      }
+    },
+    "technology_distribution": {
+      "type": "object",
+      "description": "Count of companies by technology",
+      "additionalProperties": { "type": "integer" }
+    },
+    "api_usage": {
+      "type": "object",
+      "properties": {
+        "builtwith_calls": { "type": "integer" },
+        "wappalyzer_calls": { "type": "integer" },
+        "total_cost_usd": { "type": ["number", "null"] }
+      }
+    },
+    "detection_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company_id": { "type": "string" },
+          "domain": { "type": ["string", "null"] },
+          "error": { "type": "string" }
+        },
+        "required": ["company_id", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies"],
+  "additionalProperties": false
+}

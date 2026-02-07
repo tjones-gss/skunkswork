@@ -1,0 +1,11 @@
+{
+  "crawl_queue": [],
+  "visited_urls": [],
+  "blocked_urls": [],
+  "companies": [],
+  "events": [],
+  "participants": [],
+  "competitor_signals": [],
+  "graph_edges": [],
+  "errors": []
+}

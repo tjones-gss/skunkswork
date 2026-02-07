@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/competitor_signal.json",
+  "title": "CompetitorSignal",
+  "description": "Signal indicating competitor presence or usage",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier"
+    },
+    "competitor_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of competitor product/company"
+    },
+    "competitor_normalized": {
+      "type": ["string", "null"],
+      "description": "Normalized competitor name for matching"
+    },
+    "signal_type": {
+      "type": "string",
+      "enum": [
+        "SPONSOR",
+        "EXHIBITOR",
+        "MEMBER_USAGE",
+        "SPEAKER_BIO",
+        "PARTNER_INTEGRATION",
+        "JOB_POSTING",
+        "CASE_STUDY",
+        "PRESS_RELEASE"
+      ]
+    },
+    "context": {
+      "type": "string",
+      "description": "Text context where competitor was mentioned"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.8
+    },
+    "source_company_id": {
+      "type": ["string", "null"]
+    },
+    "source_event_id": {
+      "type": ["string", "null"]
+    },
+    "source_association": {
+      "type": ["string", "null"]
+    },
+    "provenance": {
+      "type": "array",
+      "items": { "$ref": "./provenance.json" },
+      "default": []
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["competitor_name", "signal_type", "context"],
+  "additionalProperties": false
+}

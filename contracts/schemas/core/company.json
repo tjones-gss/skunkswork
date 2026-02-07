@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/company.json",
+  "title": "Company",
+  "description": "Company entity with all firmographic and enrichment data",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier"
+    },
+    "company_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical company name"
+    },
+    "normalized_name": {
+      "type": ["string", "null"],
+      "description": "Normalized name for matching"
+    },
+    "domain": {
+      "type": ["string", "null"],
+      "description": "Primary website domain"
+    },
+    "website": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "Full website URL"
+    },
+    "city": {
+      "type": ["string", "null"]
+    },
+    "state": {
+      "type": ["string", "null"],
+      "maxLength": 50
+    },
+    "country": {
+      "type": "string",
+      "default": "United States"
+    },
+    "full_address": {
+      "type": ["string", "null"]
+    },
+    "latitude": {
+      "type": ["number", "null"]
+    },
+    "longitude": {
+      "type": ["number", "null"]
+    },
+    "employee_count_min": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "employee_count_max": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "revenue_min_usd": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "revenue_max_usd": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "year_founded": {
+      "type": ["integer", "null"],
+      "minimum": 1800,
+      "maximum": 2030
+    },
+    "naics_code": {
+      "type": ["string", "null"]
+    },
+    "sic_code": {
+      "type": ["string", "null"]
+    },
+    "industry": {
+      "type": ["string", "null"]
+    },
+    "erp_system": {
+      "type": ["string", "null"]
+    },
+    "crm_system": {
+      "type": ["string", "null"]
+    },
+    "tech_stack": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "associations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Association codes",
+      "default": []
+    },
+    "contacts": {
+      "type": "array",
+      "items": { "$ref": "./contact.json" },
+      "default": []
+    },
+    "quality_score": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "quality_grade": {
+      "type": ["string", "null"],
+      "enum": ["A", "B", "C", "D", "F", null]
+    },
+    "data_sources": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "provenance": {
+      "type": "array",
+      "items": { "$ref": "./provenance.json" },
+      "default": []
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_verified_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  },
+  "required": ["company_name"],
+  "additionalProperties": false
+}

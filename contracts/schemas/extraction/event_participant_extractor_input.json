@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/event_participant_extractor_input.json",
+  "title": "EventParticipantExtractorInput",
+  "description": "Input contract for EventParticipantExtractorAgent",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "content_path": { "type": "string" },
+          "html": { "type": ["string", "null"] },
+          "event_id": { "type": "string", "description": "Event this page belongs to" },
+          "page_type": {
+            "type": "string",
+            "enum": ["PARTICIPANTS_LIST", "EXHIBITORS_LIST", "SPONSORS_LIST"]
+          },
+          "expected_participant_type": {
+            "type": ["string", "null"],
+            "enum": ["SPONSOR", "EXHIBITOR", "ATTENDEE", "SPEAKER", null]
+          }
+        },
+        "required": ["url", "event_id", "page_type"]
+      },
+      "minItems": 1
+    },
+    "association_code": {
+      "type": "string"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["pages", "association_code"],
+  "additionalProperties": false
+}

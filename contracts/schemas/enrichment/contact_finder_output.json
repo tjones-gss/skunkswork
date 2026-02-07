@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/enrichment/contact_finder_output.json",
+  "title": "ContactFinderOutput",
+  "description": "Output contract for ContactFinderAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies with contacts populated"
+    },
+    "contacts_found": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total contacts discovered"
+    },
+    "contact_stats": {
+      "type": "object",
+      "properties": {
+        "total_companies": { "type": "integer" },
+        "companies_with_contacts": { "type": "integer" },
+        "total_contacts": { "type": "integer" },
+        "verified_emails": { "type": "integer" },
+        "by_seniority": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        },
+        "by_department": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "api_usage": {
+      "type": "object",
+      "properties": {
+        "apollo_calls": { "type": "integer" },
+        "hunter_calls": { "type": "integer" },
+        "zoominfo_calls": { "type": "integer" },
+        "email_verifications": { "type": "integer" },
+        "total_cost_usd": { "type": ["number", "null"] }
+      }
+    },
+    "discovery_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company_id": { "type": "string" },
+          "company_name": { "type": "string" },
+          "source": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "required": ["company_id", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies", "contacts_found"],
+  "additionalProperties": false
+}

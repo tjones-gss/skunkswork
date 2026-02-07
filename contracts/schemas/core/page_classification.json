@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/core/page_classification.json",
+  "title": "PageClassification",
+  "description": "Result of page type classification",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "page_type": {
+      "type": "string",
+      "enum": [
+        "ASSOCIATION_HOME",
+        "ASSOCIATION_DIRECTORY",
+        "MEMBER_DIRECTORY",
+        "MEMBER_DETAIL",
+        "EVENTS_LIST",
+        "EVENT_DETAIL",
+        "PARTICIPANTS_LIST",
+        "EXHIBITORS_LIST",
+        "SPONSORS_LIST",
+        "RESOURCE",
+        "OTHER"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "signals": {
+      "type": "object",
+      "description": "Classification signals/features",
+      "additionalProperties": true
+    },
+    "recommended_extractor": {
+      "type": ["string", "null"],
+      "description": "Agent to handle extraction"
+    },
+    "classified_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["url", "page_type", "confidence"],
+  "additionalProperties": false
+}

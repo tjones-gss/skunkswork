@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/enrichment/contact_finder_input.json",
+  "title": "ContactFinderInput",
+  "description": "Input contract for ContactFinderAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "company_name": { "type": "string" },
+          "domain": { "type": ["string", "null"] },
+          "website": { "type": ["string", "null"] }
+        },
+        "required": ["id", "company_name"]
+      },
+      "minItems": 1,
+      "description": "Companies to find contacts for"
+    },
+    "contact_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["apollo", "hunter", "zoominfo", "linkedin", "clearbit"]
+      },
+      "default": ["apollo"],
+      "description": "Contact discovery services to use"
+    },
+    "target_titles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["CEO", "CFO", "CTO", "VP Operations", "VP Manufacturing", "IT Director", "Plant Manager"],
+      "description": "Job titles to prioritize"
+    },
+    "target_departments": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["C-Suite", "Operations", "IT", "Finance"],
+      "description": "Departments to prioritize"
+    },
+    "max_contacts_per_company": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 5
+    },
+    "verify_emails": {
+      "type": "boolean",
+      "default": true,
+      "description": "Verify email deliverability"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["companies"],
+  "additionalProperties": false
+}

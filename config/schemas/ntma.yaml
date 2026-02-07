@@ -1,0 +1,54 @@
+# NTMA (National Tooling & Machining Association) Extraction Schema
+# Directory URL: https://ntma.org/membership/member-directory
+
+ntma:
+  extends: default
+
+  # NTMA uses a searchable directory
+  list_container: ".member-directory, .search-results"
+  list_item: ".member-listing, .company-result"
+
+  company_name:
+    selectors:
+      - ".company-name"
+      - ".member-company"
+      - "h4.company-title"
+      - "a.company-link"
+    required: true
+
+  website:
+    selectors:
+      - ".company-website a"
+      - "a[href*='http']:not([href*='ntma.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".company-city"
+      - ".location .city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".company-state"
+      - ".location .state"
+    parser: "state_code"
+
+  phone:
+    selectors:
+      - ".company-phone"
+      - ".contact-info .phone"
+    parser: "phone"
+
+  # NTMA-specific: capabilities
+  capabilities:
+    selectors:
+      - ".capabilities"
+      - ".machining-capabilities"
+      - ".services"
+
+  certifications:
+    selectors:
+      - ".certifications"
+      - ".quality-certifications"

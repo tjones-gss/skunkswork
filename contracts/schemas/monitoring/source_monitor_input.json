@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/monitoring/source_monitor_input.json",
+  "title": "SourceMonitorInput",
+  "description": "Input contract for SourceMonitorAgent",
+  "type": "object",
+  "properties": {
+    "urls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "page_type": { "type": ["string", "null"] },
+          "association_code": { "type": ["string", "null"] },
+          "expected_selectors": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "CSS selectors that should be present"
+          },
+          "expected_item_count": {
+            "type": ["integer", "null"],
+            "description": "Expected number of items (for directories)"
+          }
+        },
+        "required": ["url"]
+      },
+      "description": "URLs to monitor for changes"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["create_baseline", "check_drift", "both"],
+      "default": "both",
+      "description": "Operation mode"
+    },
+    "drift_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.2,
+      "description": "Maximum acceptable change ratio"
+    },
+    "alert_on_drift": {
+      "type": "boolean",
+      "default": true,
+      "description": "Generate alerts for detected drift"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["urls"],
+  "additionalProperties": false
+}

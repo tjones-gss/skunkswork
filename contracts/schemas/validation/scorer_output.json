@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/scorer_output.json",
+  "title": "ScorerOutput",
+  "description": "Output contract for ScorerAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies with quality scores"
+    },
+    "scoring_stats": {
+      "type": "object",
+      "properties": {
+        "total_scored": { "type": "integer" },
+        "average_score": { "type": "number" },
+        "median_score": { "type": "number" },
+        "min_score": { "type": "integer" },
+        "max_score": { "type": "integer" },
+        "filtered_out": { "type": "integer" },
+        "by_grade": {
+          "type": "object",
+          "properties": {
+            "A": { "type": "integer" },
+            "B": { "type": "integer" },
+            "C": { "type": "integer" },
+            "D": { "type": "integer" },
+            "F": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "field_completeness": {
+      "type": "object",
+      "description": "Percentage of records with each field populated",
+      "additionalProperties": { "type": "number" }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies"],
+  "additionalProperties": false
+}

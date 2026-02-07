@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/entity_resolver_output.json",
+  "title": "EntityResolverOutput",
+  "description": "Output contract for EntityResolverAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "canonical_entities": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Resolved canonical company entities"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" },
+      "description": "Participants with company_id linked"
+    },
+    "alias_mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "canonical_id": { "type": "string" },
+          "canonical_name": { "type": "string" },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "source_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["canonical_id", "canonical_name", "aliases"]
+      },
+      "description": "Mapping of canonical entities to aliases"
+    },
+    "resolution_stats": {
+      "type": "object",
+      "properties": {
+        "companies_input": { "type": "integer" },
+        "canonical_created": { "type": "integer" },
+        "matched_to_existing": { "type": "integer" },
+        "participants_linked": { "type": "integer" },
+        "unresolved": { "type": "integer" }
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "canonical_entities"],
+  "additionalProperties": false
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/dedupe_output.json",
+  "title": "DedupeOutput",
+  "description": "Output contract for DedupeAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Deduplicated company records"
+    },
+    "duplicate_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "canonical_id": { "type": "string" },
+          "duplicate_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "match_score": { "type": "number" },
+          "match_reason": { "type": "string" }
+        },
+        "required": ["canonical_id", "duplicate_ids"]
+      },
+      "description": "Groups of duplicates found"
+    },
+    "dedupe_stats": {
+      "type": "object",
+      "properties": {
+        "input_count": { "type": "integer" },
+        "output_count": { "type": "integer" },
+        "duplicates_found": { "type": "integer" },
+        "groups_created": { "type": "integer" },
+        "records_merged": { "type": "integer" }
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies"],
+  "additionalProperties": false
+}

@@ -1,0 +1,60 @@
+# PMA (Precision Metalforming Association) Extraction Schema
+# Directory URL: https://pma.org/directory/results.asp?n=2000
+
+pma:
+  extends: default
+
+  # PMA uses a table-based directory
+  list_container: "table.directory-results"
+  list_item: "tr"
+
+  company_name:
+    selectors:
+      - "td.company-name"
+      - "a.member-link"
+      - "td:first-child a"
+      - "td:first-child"
+    required: true
+
+  website:
+    selectors:
+      - "td a[href*='http']:not([href*='pma.org'])"
+      - ".website-link"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - "td.city"
+      - "td:nth-child(3)"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - "td.state"
+      - "td:nth-child(4)"
+    parser: "state_code"
+
+  membership_tier:
+    selectors:
+      - "td.membership-type"
+      - ".tier"
+    mapping:
+      "P": "Platinum"
+      "G": "Gold"
+      "S": "Silver"
+      "B": "Bronze"
+      "A": "Associate"
+      "N": "New"
+
+  phone:
+    selectors:
+      - "td.phone"
+      - "td:contains('(')"
+    parser: "phone"
+
+  # PMA-specific fields
+  products:
+    selectors:
+      - "td.products"
+      - ".product-categories"

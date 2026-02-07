@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/link_crawler_output.json",
+  "title": "LinkCrawlerOutput",
+  "description": "Output contract for LinkCrawlerAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "html_hash": { "type": "string" },
+          "content_path": { "type": "string", "description": "Path to stored HTML" },
+          "status_code": { "type": "integer" },
+          "content_type": { "type": ["string", "null"] },
+          "fetched_at": { "type": "string", "format": "date-time" },
+          "links_found": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["url", "html_hash", "content_path", "status_code"]
+      }
+    },
+    "new_urls_discovered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "source_url": { "type": "string", "format": "uri" },
+          "depth": { "type": "integer" }
+        },
+        "required": ["url", "source_url"]
+      }
+    },
+    "failed_urls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "error": { "type": "string" },
+          "status_code": { "type": ["integer", "null"] }
+        },
+        "required": ["url", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "pages"],
+  "additionalProperties": false
+}

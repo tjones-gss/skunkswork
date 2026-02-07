@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/enrichment/firmographic_output.json",
+  "title": "FirmographicOutput",
+  "description": "Output contract for FirmographicAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Enriched company records"
+    },
+    "enrichment_stats": {
+      "type": "object",
+      "properties": {
+        "total_input": { "type": "integer" },
+        "enriched": { "type": "integer" },
+        "skipped": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "by_source": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "api_usage": {
+      "type": "object",
+      "properties": {
+        "clearbit_calls": { "type": "integer" },
+        "apollo_calls": { "type": "integer" },
+        "zoominfo_calls": { "type": "integer" },
+        "total_cost_usd": { "type": ["number", "null"] }
+      }
+    },
+    "enrichment_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company_id": { "type": "string" },
+          "company_name": { "type": "string" },
+          "source": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "required": ["company_id", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "companies"],
+  "additionalProperties": false
+}

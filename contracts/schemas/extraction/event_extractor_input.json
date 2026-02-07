@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/event_extractor_input.json",
+  "title": "EventExtractorInput",
+  "description": "Input contract for EventExtractorAgent",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "content_path": { "type": "string" },
+          "html": { "type": ["string", "null"] },
+          "page_type": {
+            "type": "string",
+            "enum": ["EVENTS_LIST", "EVENT_DETAIL"]
+          }
+        },
+        "required": ["url", "page_type"]
+      },
+      "minItems": 1
+    },
+    "association_code": {
+      "type": "string"
+    },
+    "extract_participants": {
+      "type": "boolean",
+      "default": false,
+      "description": "Also extract participant links from event pages"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["pages", "association_code"],
+  "additionalProperties": false
+}

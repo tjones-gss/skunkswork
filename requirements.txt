@@ -1,0 +1,69 @@
+# NAM Intelligence Pipeline - Python Dependencies
+
+# Core
+python-dotenv==1.0.0
+pyyaml==6.0.1
+pydantic==2.5.0
+jsonschema>=4.20.0
+
+# HTTP & Async
+httpx==0.25.0
+aiohttp==3.9.0
+aiofiles==23.2.1
+
+# Web Scraping
+beautifulsoup4==4.12.2
+lxml==4.9.3
+selectolax==0.3.17
+playwright==1.40.0
+
+# PDF Processing
+pdfplumber==0.10.3
+PyMuPDF>=1.24.0
+camelot-py[base]==0.11.0
+pytesseract==0.3.10
+pdf2image==1.16.3
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.26.0
+openpyxl>=3.1.2
+
+# DNS Resolution (for validation)
+dnspython==2.4.2
+
+# Fuzzy Matching
+rapidfuzz==3.5.0
+python-Levenshtein==0.23.0
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+alembic==1.12.0
+
+# Redis (for task queue)
+redis==5.0.0
+celery==5.3.0
+
+# Retry & Rate Limiting
+tenacity==8.2.3
+ratelimit==2.2.1
+
+# Logging & Monitoring
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Testing
+pytest==7.4.0
+pytest-asyncio==0.21.0
+pytest-cov==4.1.0
+responses==0.24.0
+pytest-httpx==0.27.0
+
+# CLI
+click==8.1.7
+rich==13.7.0
+tqdm==4.66.0
+
+# Type hints
+typing-extensions==4.8.0

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/event_extractor_output.json",
+  "title": "EventExtractorOutput",
+  "description": "Output contract for EventExtractorAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "../core/event.json" },
+      "description": "Extracted event records"
+    },
+    "participant_urls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "event_id": { "type": "string" },
+          "participant_type": { "type": "string" }
+        },
+        "required": ["url", "event_id"]
+      },
+      "description": "Links to sponsor/exhibitor/attendee pages"
+    },
+    "pages_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "extraction_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "required": ["url", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "events"],
+  "additionalProperties": false
+}

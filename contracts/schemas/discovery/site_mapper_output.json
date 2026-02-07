@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/site_mapper_output.json",
+  "title": "SiteMapperOutput",
+  "description": "Output contract for SiteMapperAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "discovered_urls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "depth": { "type": "integer", "minimum": 0 },
+          "source_url": { "type": ["string", "null"] },
+          "page_type_hint": { "type": ["string", "null"] }
+        },
+        "required": ["url", "depth"]
+      }
+    },
+    "sitemap_found": {
+      "type": "boolean",
+      "description": "Whether sitemap.xml was found"
+    },
+    "sitemap_urls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "URLs from sitemap.xml"
+    },
+    "member_directory_urls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Identified member directory URLs"
+    },
+    "event_urls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Identified event-related URLs"
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "discovered_urls"],
+  "additionalProperties": false
+}

@@ -1,0 +1,50 @@
+# Environment & secrets
+.env
+*.pem
+*.key
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Runtime artifacts
+data/
+logs/
+
+# Sensitive business documents & archives
+resources/
+gss-research-engine/
+gss-research-engine.zip
+
+# Office temp files
+~$*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code local state
+.claude/
+
+# Windows
+nul

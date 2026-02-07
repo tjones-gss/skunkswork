@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/page_classifier_output.json",
+  "title": "PageClassifierOutput",
+  "description": "Output contract for PageClassifierAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "classifications": {
+      "type": "array",
+      "items": { "$ref": "../core/page_classification.json" }
+    },
+    "by_page_type": {
+      "type": "object",
+      "description": "URLs grouped by page type",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "format": "uri" }
+      }
+    },
+    "extraction_queue": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "page_type": { "type": "string" },
+          "recommended_extractor": { "type": "string" },
+          "confidence": { "type": "number" }
+        },
+        "required": ["url", "page_type", "recommended_extractor"]
+      },
+      "description": "URLs ready for extraction with assigned extractors"
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "classifications"],
+  "additionalProperties": false
+}

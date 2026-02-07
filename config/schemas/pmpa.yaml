@@ -1,0 +1,58 @@
+# PMPA (Precision Machined Products Association) Extraction Schema
+# Directory URL: https://pmpa.org/membership/find-a-member
+
+pmpa:
+  extends: default
+
+  # PMPA uses a search/filter directory
+  list_container: ".member-search-results, .find-member"
+  list_item: ".member-result, .member-card"
+
+  company_name:
+    selectors:
+      - ".member-company-name"
+      - ".company-name"
+      - "h4"
+      - "strong.company"
+    required: true
+
+  website:
+    selectors:
+      - ".member-website a"
+      - "a[href*='http']:not([href*='pmpa.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".member-city"
+      - ".location-city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".member-state"
+      - ".location-state"
+    parser: "state_code"
+
+  phone:
+    selectors:
+      - ".member-phone"
+      - ".contact-phone"
+    parser: "phone"
+
+  # PMPA-specific: precision machining capabilities
+  machining_types:
+    selectors:
+      - ".machining-types"
+      - ".capabilities"
+
+  materials:
+    selectors:
+      - ".materials-worked"
+      - ".materials"
+
+  certifications:
+    selectors:
+      - ".certifications"
+      - ".iso-certifications"

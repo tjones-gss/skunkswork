@@ -1,0 +1,355 @@
+# Agent Configuration
+# NAM Intelligence Pipeline
+
+# Global settings
+global:
+  max_concurrent_agents: 5
+  default_timeout: 300  # seconds
+  checkpoint_interval: 100  # records
+
+# Discovery agents
+discovery:
+  site_mapper:
+    timeout: 120
+    max_depth: 3
+    directory_patterns:
+      - "/members"
+      - "/directory"
+      - "/member-list"
+      - "/member-directory"
+      - "/membership"
+      - "/our-members"
+      - "/find-a-member"
+      - "/membership-directory"
+      - "/membership-list"
+
+  link_crawler:
+    timeout: 600
+    max_pages: 200
+    batch_size: 50
+    concurrent_requests: 3
+
+  access_gatekeeper:
+    timeout: 60
+    cache_robots_txt: true
+    cache_ttl: 3600  # 1 hour
+    check_tos: true
+    default_crawl_delay: 1.0
+    user_agent: "NAM-Intel-Bot/1.0 (+https://example.com/bot-info)"
+
+  page_classifier:
+    timeout: 30
+    confidence_threshold: 0.6
+    fallback_type: "other"
+    analyze_content: true
+    max_content_length: 50000  # chars to analyze
+
+# Extraction agents
+extraction:
+  html_parser:
+    timeout: 30
+    batch_size: 100
+    concurrent_requests: 5
+    default_schema: "default"
+    retry_on_error: true
+    max_retries: 3
+
+  api_client:
+    timeout: 30
+    max_retries: 3
+    providers:
+      clearbit:
+        rate_limit: 10  # req/sec
+        daily_quota: 10000
+      builtwith:
+        rate_limit: 5
+        daily_quota: 5000
+      apollo:
+        rate_limit: 0.8
+        daily_quota: 5000
+      zoominfo:
+        rate_limit: 1.5
+        daily_quota: 5000
+
+  pdf_parser:
+    timeout: 120
+    max_pages: 500
+
+  event_extractor:
+    timeout: 120
+    batch_size: 50
+    parse_date_formats:
+      - "%B %d, %Y"
+      - "%m/%d/%Y"
+      - "%Y-%m-%d"
+      - "%d %B %Y"
+    event_types:
+      - conference
+      - trade_show
+      - workshop
+      - webinar
+      - networking
+      - training
+      - annual_meeting
+    extract_speakers: true
+    extract_agenda: true
+
+  event_participant_extractor:
+    timeout: 120
+    batch_size: 50
+    sponsor_tiers:
+      - platinum
+      - gold
+      - silver
+      - bronze
+      - title
+      - presenting
+      - supporting
+    extract_booth_numbers: true
+    extract_categories: true
+    flag_auth_required: true
+
+# Enrichment agents
+enrichment:
+  firmographic:
+    timeout: 300
+    providers:
+      - clearbit
+      - apollo
+      - zoominfo
+    batch_size: 50
+    skip_if_exists: true
+
+  tech_stack:
+    timeout: 300
+    methods:
+      - builtwith
+      - website_fingerprint
+      - job_postings
+    batch_size: 50
+    skip_if_exists: true
+
+  contact_finder:
+    timeout: 300
+    providers:
+      - apollo
+      - zoominfo
+    target_titles:
+      - "CIO"
+      - "VP IT"
+      - "IT Director"
+      - "Chief Information Officer"
+      - "VP Information Technology"
+      - "Director of IT"
+      - "ERP Manager"
+      - "COO"
+      - "VP Operations"
+      - "Chief Operating Officer"
+      - "CFO"
+      - "Controller"
+      - "CEO"
+      - "President"
+      - "Owner"
+      - "Plant Manager"
+      - "VP Manufacturing"
+    max_contacts_per_company: 5
+    batch_size: 50
+
+# Validation agents
+validation:
+  dedupe:
+    timeout: 300
+    threshold: 0.85  # Similarity threshold for fuzzy matching
+    match_fields:
+      - company_name
+      - domain
+      - city
+      - state
+    weights:
+      company_name: 0.5
+      domain: 0.3
+      city: 0.1
+      state: 0.1
+
+  crossref:
+    timeout: 300
+    methods:
+      - dns_mx
+      - google_places
+    skip_unverifiable: false
+
+  scorer:
+    timeout: 300
+    min_quality_score: 60
+    weights:
+      completeness: 0.30
+      accuracy: 0.40
+      freshness: 0.15
+      source_reliability: 0.15
+    required_fields:
+      - company_name
+      - website
+      - city
+      - state
+    valuable_fields:
+      - employee_count_min
+      - revenue_min_usd
+      - erp_system
+      - contacts
+      - year_founded
+      - naics_code
+    source_scores:
+      clearbit: 95
+      zoominfo: 90
+      apollo: 85
+      builtwith: 80
+      website: 70
+      job_postings: 65
+      association: 60
+
+  entity_resolver:
+    timeout: 300
+    batch_size: 1000
+    confidence_threshold: 70  # 0-100 scale
+    match_weights:
+      domain: 0.40
+      name: 0.30
+      phone: 0.15
+      address: 0.15
+    name_normalization:
+      remove_legal_suffixes: true
+      expand_abbreviations: true
+      lowercase: true
+    merge_strategy: "highest_quality"  # or "most_recent", "most_complete"
+
+# Intelligence agents
+intelligence:
+  competitor_signal_miner:
+    timeout: 300
+    batch_size: 100
+    target_competitors:
+      - Epicor
+      - Odoo
+      - Infor
+      - IQMS
+      - JobBOSS
+      - SYSPRO
+      - Acumatica
+      - "Microsoft Dynamics"
+      - Aptean
+      - Fulcrum
+      - SAP
+      - Oracle
+      - NetSuite
+      - Sage
+      - Plex
+      - DELMIAworks
+      - Global Shop Solutions
+      - E2 Shop System
+    signal_types:
+      - sponsor
+      - exhibitor
+      - member_usage
+      - speaker_bio
+      - partner_integration
+      - case_study
+      - news_mention
+    extract_context: true
+    context_chars: 200
+
+  relationship_graph_builder:
+    timeout: 600
+    node_types:
+      - company
+      - association
+      - event
+      - person
+      - competitor
+      - technology
+    edge_types:
+      - member_of
+      - participated_in
+      - uses_technology
+      - competes_with
+      - employs
+      - partners_with
+      - sponsored_by
+      - exhibited_at
+    export_formats:
+      - json
+      - cytoscape
+      - gephi
+    calculate_metrics: true
+
+# Export agents
+export:
+  export_activation:
+    timeout: 300
+    default_format: "csv"
+    include_provenance: true
+    min_quality_score: 60
+    crm_mappings:
+      salesforce:
+        company_name: "Name"
+        website: "Website"
+        domain: "Domain__c"
+        city: "BillingCity"
+        state: "BillingState"
+        country: "BillingCountry"
+        employee_count_min: "NumberOfEmployees"
+        industry: "Industry"
+        description: "Description"
+      hubspot:
+        company_name: "name"
+        website: "website"
+        domain: "domain"
+        city: "city"
+        state: "state"
+        country: "country"
+        employee_count_min: "numberofemployees"
+        industry: "industry"
+        description: "description"
+
+# Monitoring agents
+monitoring:
+  source_monitor:
+    timeout: 300
+    check_interval: 86400  # 24 hours in seconds
+    alert_levels:
+      critical: 0.5  # >50% change
+      warning: 0.2   # >20% change
+      info: 0.05     # >5% change
+    monitor_selectors: true
+    monitor_structure: true
+    monitor_content_length: true
+    baseline_storage: "data/monitoring/baselines"
+    report_storage: "data/monitoring/reports"
+    retention_days: 90
+
+# Rate limits by domain
+rate_limits:
+  default: 1.0
+  # Association sites
+  pma.org: 0.5
+  makeitelectric.org: 0.5
+  socma.org: 0.5
+  agma.org: 0.5
+  aia-aerospace.org: 0.5
+  ntma.org: 0.5
+  pmpa.org: 0.5
+  forging.org: 0.5
+  diecasting.org: 0.5
+  afsinc.org: 0.5
+  # External APIs
+  linkedin.com: 0.2
+  indeed.com: 0.3
+  clearbit.com: 10.0
+  builtwith.com: 5.0
+  apollo.io: 0.8
+  zoominfo.com: 1.5
+
+# Orchestrator settings
+orchestrator:
+  min_quality_score: 60
+  max_extraction_errors: 0.1  # Max 10% error rate
+  checkpoint_enabled: true

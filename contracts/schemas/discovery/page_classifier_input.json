@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/discovery/page_classifier_input.json",
+  "title": "PageClassifierInput",
+  "description": "Input contract for PageClassifierAgent",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "content_path": { "type": "string", "description": "Path to HTML file" },
+          "html": { "type": ["string", "null"], "description": "Raw HTML (if not using content_path)" }
+        },
+        "required": ["url"]
+      },
+      "minItems": 1
+    },
+    "association_code": {
+      "type": "string"
+    },
+    "use_ml": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use ML classifier vs rule-based"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["pages", "association_code"],
+  "additionalProperties": false
+}

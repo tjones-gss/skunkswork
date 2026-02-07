@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/api_client_input.json",
+  "title": "APIClientInput",
+  "description": "Input contract for APIClientAgent (for associations with APIs)",
+  "type": "object",
+  "properties": {
+    "api_config": {
+      "type": "object",
+      "properties": {
+        "base_url": { "type": "string", "format": "uri" },
+        "auth_type": {
+          "type": "string",
+          "enum": ["none", "api_key", "bearer", "basic"]
+        },
+        "auth_header": { "type": ["string", "null"] },
+        "auth_value_env": { "type": ["string", "null"], "description": "Env var name for auth value" }
+      },
+      "required": ["base_url"]
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "method": { "type": "string", "enum": ["GET", "POST"], "default": "GET" },
+          "params": { "type": "object" },
+          "entity_type": { "type": "string", "enum": ["company", "event", "participant"] }
+        },
+        "required": ["path", "entity_type"]
+      },
+      "minItems": 1
+    },
+    "association_code": {
+      "type": "string"
+    },
+    "pagination": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["offset", "page", "cursor", "none"] },
+        "param_name": { "type": "string" },
+        "page_size": { "type": "integer" },
+        "max_pages": { "type": "integer" }
+      }
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["api_config", "endpoints", "association_code"],
+  "additionalProperties": false
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/export/export_activation_input.json",
+  "title": "ExportActivationInput",
+  "description": "Input contract for ExportActivationAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Companies to export"
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "../core/event.json" },
+      "description": "Events to export"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" },
+      "description": "Participants to export"
+    },
+    "competitor_signals": {
+      "type": "array",
+      "items": { "$ref": "../core/competitor_signal.json" },
+      "description": "Competitor signals to export"
+    },
+    "export_formats": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["csv", "json", "jsonl", "xlsx", "parquet"]
+      },
+      "default": ["csv", "json"],
+      "description": "Output formats to generate"
+    },
+    "export_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "companies_full",
+          "companies_marketing",
+          "contacts_only",
+          "events",
+          "participants",
+          "competitor_report"
+        ]
+      },
+      "default": ["companies_full"],
+      "description": "Types of exports to generate"
+    },
+    "output_dir": {
+      "type": "string",
+      "description": "Output directory path"
+    },
+    "include_provenance": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include provenance in exports"
+    },
+    "minimum_quality_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Filter to companies above this score"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["output_dir"],
+  "additionalProperties": false
+}

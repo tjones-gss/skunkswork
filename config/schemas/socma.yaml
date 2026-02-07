@@ -1,0 +1,51 @@
+# SOCMA (Society of Chemical Manufacturers & Affiliates) Extraction Schema
+# Directory URL: https://socma.org/socma-membership/membership-list
+
+socma:
+  extends: default
+
+  # SOCMA uses a list-based directory
+  list_container: ".membership-list, .member-listing"
+  list_item: ".member-item, .member-row"
+
+  company_name:
+    selectors:
+      - ".member-name"
+      - ".company-name"
+      - "h4"
+      - "strong"
+    required: true
+
+  website:
+    selectors:
+      - ".member-website a"
+      - "a[href*='http']:not([href*='socma.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".member-city"
+      - ".location-city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".member-state"
+      - ".location-state"
+    parser: "state_code"
+
+  membership_tier:
+    selectors:
+      - ".membership-type"
+      - ".member-level"
+    mapping:
+      "Full Member": "Full"
+      "Associate Member": "Associate"
+      "Affiliate": "Affiliate"
+
+  # SOCMA-specific: chemical specialties
+  specialties:
+    selectors:
+      - ".member-specialties"
+      - ".chemical-products"

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/entity_resolver_input.json",
+  "title": "EntityResolverInput",
+  "description": "Input contract for EntityResolverAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Company records to resolve"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" },
+      "description": "Event participants to link to companies"
+    },
+    "existing_canonical": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "description": "Existing canonical entities to match against"
+    },
+    "resolution_strategy": {
+      "type": "string",
+      "enum": ["create_new", "match_existing", "hybrid"],
+      "default": "hybrid",
+      "description": "How to handle unmatched entities"
+    },
+    "match_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.9,
+      "description": "Confidence threshold for automatic matching"
+    },
+    "link_participants": {
+      "type": "boolean",
+      "default": true,
+      "description": "Link participants to resolved companies"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/intelligence/competitor_signal_miner_output.json",
+  "title": "CompetitorSignalMinerOutput",
+  "description": "Output contract for CompetitorSignalMinerAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "signals": {
+      "type": "array",
+      "items": { "$ref": "../core/competitor_signal.json" },
+      "description": "Detected competitor signals"
+    },
+    "signal_stats": {
+      "type": "object",
+      "properties": {
+        "total_signals": { "type": "integer" },
+        "by_competitor": {
+          "type": "object",
+          "description": "Signal count per competitor",
+          "additionalProperties": { "type": "integer" }
+        },
+        "by_signal_type": {
+          "type": "object",
+          "description": "Signal count per type",
+          "additionalProperties": { "type": "integer" }
+        },
+        "by_association": {
+          "type": "object",
+          "description": "Signal count per association",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "companies_with_competitor_erp": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company_id": { "type": "string" },
+          "company_name": { "type": "string" },
+          "competitor": { "type": "string" },
+          "signal_type": { "type": "string" },
+          "confidence": { "type": "number" }
+        },
+        "required": ["company_id", "competitor"]
+      },
+      "description": "Companies identified as using competitor ERP"
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "signals"],
+  "additionalProperties": false
+}

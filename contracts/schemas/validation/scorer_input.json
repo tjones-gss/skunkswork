@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/validation/scorer_input.json",
+  "title": "ScorerInput",
+  "description": "Input contract for ScorerAgent",
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "items": { "$ref": "../core/company.json" },
+      "minItems": 1,
+      "description": "Companies to score"
+    },
+    "scoring_weights": {
+      "type": "object",
+      "properties": {
+        "has_domain": { "type": "number", "default": 15 },
+        "has_website": { "type": "number", "default": 10 },
+        "has_address": { "type": "number", "default": 10 },
+        "has_phone": { "type": "number", "default": 5 },
+        "has_employee_count": { "type": "number", "default": 10 },
+        "has_revenue": { "type": "number", "default": 10 },
+        "has_industry": { "type": "number", "default": 5 },
+        "has_naics": { "type": "number", "default": 5 },
+        "has_tech_stack": { "type": "number", "default": 10 },
+        "has_contacts": { "type": "number", "default": 15 },
+        "multiple_associations": { "type": "number", "default": 5 }
+      },
+      "description": "Point values for each field"
+    },
+    "grade_thresholds": {
+      "type": "object",
+      "properties": {
+        "A": { "type": "integer", "default": 90 },
+        "B": { "type": "integer", "default": 80 },
+        "C": { "type": "integer", "default": 70 },
+        "D": { "type": "integer", "default": 60 }
+      },
+      "description": "Score thresholds for grades"
+    },
+    "minimum_score_threshold": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Filter out records below this score (optional)"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata (auto-injected)"
+    }
+  },
+  "required": ["companies"],
+  "additionalProperties": false
+}

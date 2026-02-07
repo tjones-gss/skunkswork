@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nam-pipeline/contracts/schemas/extraction/event_participant_extractor_output.json",
+  "title": "EventParticipantExtractorOutput",
+  "description": "Output contract for EventParticipantExtractorAgent",
+  "type": "object",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "records_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "../core/participant.json" },
+      "description": "Extracted participant records"
+    },
+    "companies_mentioned": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company_name": { "type": "string" },
+          "website": { "type": ["string", "null"] },
+          "participant_type": { "type": "string" },
+          "event_id": { "type": "string" }
+        },
+        "required": ["company_name", "event_id"]
+      },
+      "description": "Companies found (for entity resolution)"
+    },
+    "by_participant_type": {
+      "type": "object",
+      "description": "Participants grouped by type",
+      "properties": {
+        "SPONSOR": { "type": "integer" },
+        "EXHIBITOR": { "type": "integer" },
+        "ATTENDEE": { "type": "integer" },
+        "SPEAKER": { "type": "integer" }
+      }
+    },
+    "pages_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "extraction_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "required": ["url", "error"]
+      }
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "error_type": {
+      "type": ["string", "null"]
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Pipeline metadata"
+    }
+  },
+  "required": ["success", "records_processed", "participants"],
+  "additionalProperties": false
+}

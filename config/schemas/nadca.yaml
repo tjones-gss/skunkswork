@@ -1,0 +1,62 @@
+# NADCA (North American Die Casting Association) Extraction Schema
+# Directory URL: https://diecasting.org/membership/member-directory
+
+nadca:
+  extends: default
+
+  # NADCA member directory
+  list_container: ".member-directory, .membership-list"
+  list_item: ".member-card, .member-item"
+
+  company_name:
+    selectors:
+      - ".member-company"
+      - ".company-name"
+      - "h4.company-title"
+      - "a.company-link"
+    required: true
+
+  website:
+    selectors:
+      - ".company-website a"
+      - "a[href*='http']:not([href*='diecasting.org'])"
+    extract: "href"
+    parser: "url"
+
+  city:
+    selectors:
+      - ".company-city"
+      - ".location .city"
+    parser: "title_case"
+
+  state:
+    selectors:
+      - ".company-state"
+      - ".location .state"
+    parser: "state_code"
+
+  phone:
+    selectors:
+      - ".company-phone"
+      - ".contact-phone"
+    parser: "phone"
+
+  # NADCA-specific: die casting capabilities
+  casting_processes:
+    selectors:
+      - ".casting-processes"
+      - ".processes"
+
+  alloys:
+    selectors:
+      - ".alloys"
+      - ".materials"
+
+  membership_tier:
+    selectors:
+      - ".membership-type"
+      - ".member-category"
+    mapping:
+      "Die Caster": "Die Caster"
+      "Supplier": "Supplier"
+      "Associate": "Associate"

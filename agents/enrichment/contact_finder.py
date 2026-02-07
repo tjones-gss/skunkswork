@@ -5,7 +5,6 @@ NAM Intelligence Pipeline
 Identifies key decision-makers at target companies.
 """
 
-import os
 import re
 
 from bs4 import BeautifulSoup
@@ -152,7 +151,7 @@ class ContactFinderAgent(BaseAgent):
 
     async def _search_apollo(self, domain: str) -> list[dict]:
         """Search Apollo for contacts."""
-        api_key = os.getenv("APOLLO_API_KEY")
+        api_key = self.get_secret("APOLLO_API_KEY")
         if not api_key:
             return []
 
@@ -196,7 +195,7 @@ class ContactFinderAgent(BaseAgent):
 
     async def _search_zoominfo(self, company_name: str) -> list[dict]:
         """Search ZoomInfo for contacts."""
-        api_key = os.getenv("ZOOMINFO_API_KEY")
+        api_key = self.get_secret("ZOOMINFO_API_KEY")
         if not api_key:
             return []
 

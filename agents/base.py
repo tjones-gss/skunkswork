@@ -10,9 +10,11 @@ import json
 import os
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
+from middleware.secrets import get_secrets_manager
 from skills.common.SKILL import (
     AsyncHTTPClient,
     Config,
@@ -55,6 +57,9 @@ class BaseAgent(ABC):
         # Optional database pool (None when running without --persist-db)
         self.db_pool = db_pool
 
+        # Secrets manager (Vault -> Env fallback)
+        self._secrets = get_secrets_manager()
+
         # Load agent-specific config
         self.agent_config = self._load_agent_config()
 
@@ -91,7 +96,7 @@ class BaseAgent(ABC):
         "enrichment.firmographic": ["CLEARBIT_API_KEY", "APOLLO_API_KEY"],
         "enrichment.tech_stack": ["BUILTWITH_API_KEY"],
         "enrichment.contact_finder": ["APOLLO_API_KEY", "HUNTER_API_KEY"],
-        "validation.crossref": ["GOOGLE_PLACES_API_KEY"],
+        "validation.crossref": ["GOOGLE_PLACES_API_KEY", "LINKEDIN_API_KEY"],
     }
 
     def _setup(self, **kwargs):
@@ -100,6 +105,10 @@ class BaseAgent(ABC):
         Override in subclasses for custom setup.
         """
         pass
+
+    def get_secret(self, key: str) -> str | None:
+        """Retrieve a secret via the SecretsManager (Vault -> Env fallback)."""
+        return self._secrets.get_secret(key)
 
     def _check_api_keys(self) -> list[str]:
         """
@@ -112,7 +121,7 @@ class BaseAgent(ABC):
         if not required_keys:
             return []
 
-        missing = [k for k in required_keys if not os.environ.get(k)]
+        missing = [k for k in required_keys if not self.get_secret(k)]
         if missing:
             self.log.warning(
                 "missing_api_keys",
@@ -254,8 +263,11 @@ class BaseAgent(ABC):
         schemas = self.config.load(f"schemas/{schema_name}")
         return schemas.get(schema_name, schemas.get("default", {}))
 
-    def save_records(self, records: list[dict], output_path: str) -> int:
+    def save_records(self, records: Iterable[dict], output_path: str) -> int:
         """Save records to JSONL file with atomic write.
+
+        Accepts any iterable of dicts (list, generator, etc.) for
+        memory-efficient streaming writes of large datasets.
 
         Returns:
             Number of records saved, or -1 on failure.
@@ -265,22 +277,41 @@ class BaseAgent(ABC):
         path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
+            count = 0
             with JSONLWriter(str(tmp_path)) as writer:
-                writer.write_batch(records)
+                for record in records:
+                    writer.write(record)
+                    count += 1
             os.replace(str(tmp_path), str(path))
-            self.log.info(f"Saved {len(records)} records to {output_path}")
-            return len(records)
+            self.log.info(f"Saved {count} records to {output_path}")
+            return count
         except OSError as e:
             self.log.warning(f"save_records failed: {e}")
             tmp_path.unlink(missing_ok=True)
             return -1
 
     def load_records(self, input_path: str) -> list[dict]:
-        """Load records from JSONL file."""
+        """Load all records from JSONL file into memory.
+
+        For large files (>50MB), prefer ``load_records_iter`` to avoid
+        high peak-memory usage.
+        """
         from skills.common.SKILL import JSONLReader
 
         reader = JSONLReader(input_path)
         return reader.read_all()
+
+    def load_records_iter(self, input_path: str) -> Iterator[dict]:
+        """Yield records from a JSONL file one at a time.
+
+        Memory-efficient alternative to ``load_records`` for files that
+        may exceed available RAM.  Each record is parsed and yielded
+        individually so only one dict is resident at a time.
+        """
+        from skills.common.SKILL import JSONLReader
+
+        reader = JSONLReader(input_path)
+        yield from reader
 
     async def save_to_db(self, records: list[dict], entity_type: str = "company") -> int:
         """Persist records to PostgreSQL via the repository layer.

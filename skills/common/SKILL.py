@@ -72,6 +72,7 @@ class RateLimiter:
         "diecasting.org": 0.5,
         "afsinc.org": 0.5,
         "linkedin.com": 0.2,
+        "nubela.co": 1.0,  # Proxycurl LinkedIn API
         "indeed.com": 0.3,
         "clearbit.com": 10.0,
         "builtwith.com": 5.0,

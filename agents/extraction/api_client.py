@@ -5,7 +5,6 @@ NAM Intelligence Pipeline
 Fetches data from external APIs (Clearbit, BuiltWith, Apollo, ZoomInfo, etc.)
 """
 
-import os
 import re
 
 from agents.base import BaseAgent
@@ -114,7 +113,7 @@ class APIClientAgent(BaseAgent):
 
     async def _fetch_clearbit(self, domain: str) -> dict | None:
         """Fetch company data from Clearbit API."""
-        api_key = os.getenv("CLEARBIT_API_KEY")
+        api_key = self.get_secret("CLEARBIT_API_KEY")
 
         if not api_key:
             self.log.warning("CLEARBIT_API_KEY not set")
@@ -160,7 +159,7 @@ class APIClientAgent(BaseAgent):
 
     async def _fetch_builtwith(self, domain: str) -> dict | None:
         """Fetch technology stack from BuiltWith API."""
-        api_key = os.getenv("BUILTWITH_API_KEY")
+        api_key = self.get_secret("BUILTWITH_API_KEY")
 
         if not api_key:
             self.log.warning("BUILTWITH_API_KEY not set")
@@ -213,7 +212,7 @@ class APIClientAgent(BaseAgent):
         company_name: str = None
     ) -> dict | None:
         """Fetch data from Apollo API."""
-        api_key = os.getenv("APOLLO_API_KEY")
+        api_key = self.get_secret("APOLLO_API_KEY")
 
         if not api_key:
             self.log.warning("APOLLO_API_KEY not set")
@@ -254,7 +253,7 @@ class APIClientAgent(BaseAgent):
         domain: str = None
     ) -> dict | None:
         """Fetch data from ZoomInfo API."""
-        api_key = os.getenv("ZOOMINFO_API_KEY")
+        api_key = self.get_secret("ZOOMINFO_API_KEY")
 
         if not api_key:
             self.log.warning("ZOOMINFO_API_KEY not set")

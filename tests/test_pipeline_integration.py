@@ -718,3 +718,396 @@ class TestEndToEndPipelineFlow:
         state_manager.transition_phase(loaded_state, PipelinePhase.CLASSIFICATION)
 
         assert loaded_state.current_phase == PipelinePhase.CLASSIFICATION
+
+
+
+# =============================================================================
+# TEST: Partial-Phase Resume (P3-T02)
+# =============================================================================
+
+
+class TestPartialPhaseResume:
+    """Tests for intra-phase progress tracking and crash-resume."""
+
+    def test_phase_progress_defaults_empty(self, fresh_pipeline_state):
+        """phase_progress is an empty dict by default."""
+        assert fresh_pipeline_state.phase_progress == {}
+
+    def test_update_phase_progress_sets_cursor(self, fresh_pipeline_state):
+        """update_phase_progress() stores cursor data."""
+        fresh_pipeline_state.update_phase_progress(cursor=50, total=200)
+
+        assert fresh_pipeline_state.phase_progress == {
+            "cursor": 50,
+            "total": 200,
+        }
+
+    def test_update_phase_progress_merges(self, fresh_pipeline_state):
+        """Successive calls merge, not replace."""
+        fresh_pipeline_state.update_phase_progress(cursor=10)
+        fresh_pipeline_state.update_phase_progress(last_url="https://example.com")
+
+        assert fresh_pipeline_state.phase_progress == {
+            "cursor": 10,
+            "last_url": "https://example.com",
+        }
+
+    def test_update_phase_progress_overwrites_existing_key(self, fresh_pipeline_state):
+        """A key already present is overwritten by a new call."""
+        fresh_pipeline_state.update_phase_progress(cursor=10)
+        fresh_pipeline_state.update_phase_progress(cursor=20)
+
+        assert fresh_pipeline_state.phase_progress["cursor"] == 20
+
+    def test_clear_phase_progress(self, fresh_pipeline_state):
+        """clear_phase_progress() resets to empty dict."""
+        fresh_pipeline_state.update_phase_progress(cursor=99)
+        fresh_pipeline_state.clear_phase_progress()
+
+        assert fresh_pipeline_state.phase_progress == {}
+
+    def test_transition_resets_phase_progress(self, fresh_pipeline_state):
+        """Transitioning to a new phase clears phase_progress."""
+        from state.machine import PipelinePhase
+
+        fresh_pipeline_state.transition_to(PipelinePhase.GATEKEEPER)
+        fresh_pipeline_state.update_phase_progress(cursor=42, total=100)
+
+        # Progress should exist
+        assert fresh_pipeline_state.phase_progress["cursor"] == 42
+
+        # Transition clears it
+        fresh_pipeline_state.transition_to(PipelinePhase.DISCOVERY)
+        assert fresh_pipeline_state.phase_progress == {}
+
+    def test_get_summary_includes_phase_progress(self, fresh_pipeline_state):
+        """get_summary() includes phase_progress."""
+        fresh_pipeline_state.update_phase_progress(cursor=5, batch=2)
+        summary = fresh_pipeline_state.get_summary()
+
+        assert "phase_progress" in summary
+        assert summary["phase_progress"] == {"cursor": 5, "batch": 2}
+
+    def test_checkpoint_persists_phase_progress(self, state_manager, fresh_pipeline_state):
+        """Checkpoint file contains phase_progress."""
+        from state.machine import PipelinePhase
+
+        fresh_pipeline_state.transition_to(PipelinePhase.GATEKEEPER)
+        fresh_pipeline_state.transition_to(PipelinePhase.DISCOVERY)
+        fresh_pipeline_state.update_phase_progress(cursor=150, total=500)
+        state_manager.checkpoint(fresh_pipeline_state)
+
+        # Read checkpoint file directly
+        cp = state_manager.get_latest_checkpoint(fresh_pipeline_state.job_id)
+        assert cp is not None
+        assert cp["phase_progress"] == {"cursor": 150, "total": 500}
+
+    def test_save_load_preserves_phase_progress(self, state_manager, fresh_pipeline_state):
+        """phase_progress survives a save/load round-trip."""
+        from state.machine import PipelinePhase
+
+        fresh_pipeline_state.transition_to(PipelinePhase.GATEKEEPER)
+        fresh_pipeline_state.update_phase_progress(
+            cursor=300, total=1200, last_url="https://pma.org/page/30"
+        )
+        state_manager.save_state(fresh_pipeline_state)
+
+        loaded = state_manager.load_state(fresh_pipeline_state.job_id)
+
+        assert loaded.phase_progress == {
+            "cursor": 300,
+            "total": 1200,
+            "last_url": "https://pma.org/page/30",
+        }
+
+    def test_crash_resume_scenario(self, state_manager):
+        """Simulate crash mid-phase → reload → verify resume from cursor."""
+        from state.machine import PipelinePhase
+
+        # --- simulate running pipeline ---
+        state = state_manager.create_state(["PMA"], job_id="crash-resume-test")
+        state_manager.transition_phase(state, PipelinePhase.GATEKEEPER)
+        state_manager.transition_phase(state, PipelinePhase.DISCOVERY)
+
+        # Add some URLs and mark partial progress
+        for i in range(100):
+            state.add_to_queue(f"https://pma.org/member/{i}")
+
+        # Process first 45 URLs, updating cursor each batch
+        state.update_phase_progress(cursor=45, total=100, batch_number=5)
+        state_manager.checkpoint(state)
+
+        # --- simulate crash & restart ---
+        reloaded = state_manager.load_state("crash-resume-test")
+
+        # Verify we know where we left off
+        assert reloaded.current_phase == PipelinePhase.DISCOVERY
+        assert reloaded.phase_progress["cursor"] == 45
+        assert reloaded.phase_progress["total"] == 100
+        assert reloaded.phase_progress["batch_number"] == 5
+
+        # Continue from cursor=45 (not from 0)
+        reloaded.update_phase_progress(cursor=100, total=100)
+        state_manager.checkpoint(reloaded)
+
+        # Verify final state
+        final = state_manager.load_state("crash-resume-test")
+        assert final.phase_progress["cursor"] == 100
+
+    def test_update_phase_progress_updates_timestamp(self, fresh_pipeline_state):
+        """update_phase_progress() bumps updated_at."""
+        before = fresh_pipeline_state.updated_at
+        import time
+        time.sleep(0.01)
+        fresh_pipeline_state.update_phase_progress(cursor=1)
+        assert fresh_pipeline_state.updated_at > before
+
+    def test_clear_phase_progress_updates_timestamp(self, fresh_pipeline_state):
+        """clear_phase_progress() bumps updated_at."""
+        fresh_pipeline_state.update_phase_progress(cursor=1)
+        before = fresh_pipeline_state.updated_at
+        import time
+        time.sleep(0.01)
+        fresh_pipeline_state.clear_phase_progress()
+        assert fresh_pipeline_state.updated_at > before
+
+
+
+# =============================================================================
+# TEST: End-to-End Pipeline With Mocked APIs (P3-T03)
+# =============================================================================
+
+
+class TestEndToEndWithMockedAPIs:
+    """
+    E2E test: full pipeline discovery → extraction → enrichment →
+    validation → export with all external APIs mocked.
+
+    WBS P3-T03 acceptance criteria:
+      ≥1 company extracted, quality_score > 0, no unhandled exceptions,
+      exports written, runs in CI without real API keys.
+    """
+
+    @pytest.fixture
+    def e2e_pipeline(self, tmp_path, monkeypatch):
+        """Create orchestrator wired to mock spawner for full-pipeline E2E."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from state.machine import PipelinePhase, StateManager
+
+        monkeypatch.chdir(tmp_path)
+        call_log: list[tuple[str, dict]] = []
+
+        # -- mock spawn side-effect dispatching by agent type ----------------
+        async def mock_spawn(agent_type, task):
+            call_log.append((agent_type, dict(task) if isinstance(task, dict) else task))
+
+            if agent_type == "discovery.access_gatekeeper":
+                return {"success": True, "is_allowed": True}
+
+            if agent_type == "discovery.site_mapper":
+                url = task.get("base_url", "")
+                if "/member/" not in url:
+                    return {"success": True, "directory_url": f"{url}/directory"}
+                return {"success": True}
+
+            if agent_type == "discovery.link_crawler":
+                return {
+                    "success": True,
+                    "member_urls": [
+                        "https://www.pma.org/member/acme",
+                        "https://www.pma.org/member/beta",
+                    ],
+                }
+
+            if agent_type == "discovery.page_classifier":
+                return {"success": True, "page_type": "MEMBER_DETAIL"}
+
+            if agent_type == "extraction.html_parser":
+                slug = task.get("url", "").rstrip("/").split("/")[-1]
+                return {
+                    "success": True,
+                    "records": [{
+                        "company_name": f"{slug.title()} Manufacturing",
+                        "website": f"https://{slug}-mfg.com",
+                        "domain": f"{slug}-mfg.com",
+                        "city": "Cleveland", "state": "OH",
+                        "country": "United States",
+                        "associations": ["PMA"],
+                    }],
+                }
+
+            if agent_type == "enrichment.firmographic":
+                recs = [dict(r) for r in task.get("records", [])]
+                for r in recs:
+                    r.update(employee_count_min=50, employee_count_max=200,
+                             revenue_min_usd=5_000_000, naics_code="332119")
+                return {"success": True, "records": recs}
+
+            if agent_type == "enrichment.tech_stack":
+                recs = [dict(r) for r in task.get("records", [])]
+                for r in recs:
+                    r.update(tech_stack=["SAP", "Salesforce"], erp_system="SAP")
+                return {"success": True, "records": recs}
+
+            if agent_type == "enrichment.contact_finder":
+                recs = [dict(r) for r in task.get("records", [])]
+                for r in recs:
+                    r["contacts"] = [{"name": "J Doe", "title": "VP Ops",
+                                      "email": "jdoe@example.com"}]
+                return {"success": True, "records": recs}
+
+            if agent_type == "validation.dedupe":
+                return {"success": True, "records": task.get("records", [])}
+
+            if agent_type == "validation.crossref":
+                recs = [dict(r) for r in task.get("records", [])]
+                for r in recs:
+                    r["crossref_verified"] = True
+                return {"success": True, "records": recs}
+
+            if agent_type == "validation.scorer":
+                recs = [dict(r) for r in task.get("records", [])]
+                for r in recs:
+                    r["quality_score"] = 85
+                return {"success": True, "records": recs}
+
+            if agent_type == "validation.entity_resolver":
+                return {"success": True,
+                        "canonical_entities": task.get("records", [])}
+
+            if agent_type == "intelligence.competitor_signal_miner":
+                return {"success": True,
+                        "signals": [{"competitor": "Epicor",
+                                     "signal_type": "mention"}]}
+
+            if agent_type == "intelligence.relationship_graph_builder":
+                return {"success": True, "edges_created": 5}
+
+            if agent_type == "export.export_activation":
+                return {"success": True,
+                        "export_path": f"data/exports/{task.get('export_type')}.csv",
+                        "records_exported": len(
+                            task.get("records", task.get("companies", [])))}
+
+            if agent_type == "monitoring.source_monitor":
+                return {"success": True}
+
+            return {"success": False, "error": f"Unknown agent: {agent_type}"}
+
+        # -- build orchestrator under patches --------------------------------
+        with patch("agents.base.Config") as mc, \
+             patch("agents.base.StructuredLogger"), \
+             patch("agents.base.AsyncHTTPClient") as mock_http, \
+             patch("agents.base.RateLimiter"), \
+             patch("agents.base.DeadLetterQueue"):
+
+            mc.return_value.load.side_effect = lambda name: (
+                {"associations": {
+                    "PMA": {"url": "https://www.pma.org", "priority": "high"}
+                }}
+                if name == "associations" else {}
+            )
+            mock_http.return_value.close = AsyncMock()
+
+            from agents.orchestrator import OrchestratorAgent
+            orch = OrchestratorAgent(
+                agent_type="orchestrator",
+                mode="full",
+                associations=["PMA"],
+                dry_run=False,
+            )
+
+        orch.log = MagicMock()
+        orch.state_manager = StateManager(state_dir=str(tmp_path / "state"))
+
+        mock_spawner = MagicMock()
+        mock_spawner.spawn = AsyncMock(side_effect=mock_spawn)
+        orch.spawner = mock_spawner
+
+        # Patch _execute_phase: inject URLs before EXTRACTION so that the
+        # extraction phase has work to do (discovery consumes the queue).
+        original_execute = orch._execute_phase
+
+        async def _patched_execute(phase):
+            if phase == PipelinePhase.EXTRACTION and not orch.state.crawl_queue:
+                for slug in ("acme-ext", "beta-ext"):
+                    orch.state.crawl_queue.append({
+                        "url": f"https://www.pma.org/member/{slug}",
+                        "association": "PMA",
+                        "page_type_hint": "MEMBER_DETAIL",
+                        "priority": 5,
+                    })
+            return await original_execute(phase)
+
+        orch._execute_phase = _patched_execute
+        return orch, call_log
+
+    # -- test methods --------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline_happy_path(self, e2e_pipeline):
+        """Pipeline runs INIT→…→DONE, extracts ≥1 company with score > 0."""
+        orch, _ = e2e_pipeline
+        result = await orch.run({"mode": "full", "associations": ["PMA"]})
+
+        assert result["success"] is True
+        assert result["final_phase"] == "DONE"
+        assert result["totals"]["companies_extracted"] >= 1
+        assert len(result["errors"]) == 0
+
+        for company in orch.state.companies:
+            assert company.get("quality_score", 0) > 0, (
+                f"{company.get('company_name')} has no quality_score"
+            )
+
+    @pytest.mark.asyncio
+    async def test_all_phase_agents_called(self, e2e_pipeline):
+        """Every expected agent type is invoked at least once."""
+        orch, call_log = e2e_pipeline
+        await orch.run({"mode": "full", "associations": ["PMA"]})
+
+        called = {a for a, _ in call_log}
+        expected = {
+            "discovery.access_gatekeeper", "discovery.site_mapper",
+            "discovery.link_crawler", "extraction.html_parser",
+            "enrichment.firmographic", "enrichment.tech_stack",
+            "enrichment.contact_finder", "validation.dedupe",
+            "validation.crossref", "validation.scorer",
+            "validation.entity_resolver",
+            "intelligence.competitor_signal_miner",
+            "intelligence.relationship_graph_builder",
+            "export.export_activation", "monitoring.source_monitor",
+        }
+        missing = expected - called
+        assert not missing, f"Agents never called: {missing}"
+
+    @pytest.mark.asyncio
+    async def test_exports_written_to_disk(self, e2e_pipeline):
+        """Result files and company JSONL are persisted."""
+        from pathlib import Path
+
+        orch, _ = e2e_pipeline
+        await orch.run({"mode": "full", "associations": ["PMA"]})
+
+        job_dir = Path(f"data/validated/{orch.state.job_id}")
+        assert (job_dir / "pipeline_result.json").exists()
+        assert (job_dir / "companies.jsonl").exists()
+        assert len(orch.state.exports) >= 1
+
+    @pytest.mark.asyncio
+    async def test_runs_without_api_keys(self, e2e_pipeline, monkeypatch):
+        """Pipeline succeeds even when all API-key env vars are unset."""
+        for key in ("CLEARBIT_API_KEY", "APOLLO_API_KEY", "BUILTWITH_API_KEY",
+                     "HUNTER_API_KEY", "ZOOMINFO_API_KEY", "GOOGLE_PLACES_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+
+        orch, _ = e2e_pipeline
+        result = await orch.run({"mode": "full", "associations": ["PMA"]})
+        assert result["success"] is True
+
+    @pytest.mark.skip(reason="P2-T02 circuit breaker not yet landed")
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_under_api_failure(self, e2e_pipeline):
+        """Circuit breaker trips under simulated API failure."""
+        pass

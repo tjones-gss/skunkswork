@@ -6,7 +6,6 @@ Validates company records against external sources.
 """
 
 import asyncio
-import os
 import re
 import socket
 from datetime import UTC, datetime
@@ -30,6 +29,17 @@ class CrossRefAgent(BaseAgent):
         """Initialize cross-ref settings."""
         self.methods = self.agent_config.get("methods", ["dns_mx", "google_places"])
         self.skip_unverifiable = self.agent_config.get("skip_unverifiable", False)
+
+        # LinkedIn / Proxycurl settings
+        self._linkedin_cache: dict[str, tuple[str | None, str | None, float]] = {}
+        self._linkedin_cache_ttl: int = self.agent_config.get(
+            "linkedin_cache_ttl", 86400
+        )  # 24h
+        self._linkedin_api_calls_today: int = 0
+        self._linkedin_api_date: str = datetime.now(UTC).strftime("%Y-%m-%d")
+        self._linkedin_daily_limit: int = self.agent_config.get(
+            "linkedin_daily_limit", 200
+        )
 
     async def run(self, task: dict) -> dict:
         """
@@ -223,7 +233,7 @@ class CrossRefAgent(BaseAgent):
         state: str
     ) -> bool | None:
         """Validate company exists at location using Google Places."""
-        api_key = os.getenv("GOOGLE_PLACES_API_KEY")
+        api_key = self.get_secret("GOOGLE_PLACES_API_KEY")
         if not api_key:
             return None
 
@@ -268,21 +278,123 @@ class CrossRefAgent(BaseAgent):
         return None
 
     async def _validate_linkedin(self, domain: str) -> bool | None:
-        """Check if company has LinkedIn page."""
-        # This would typically use LinkedIn API
-        # For now, we'll do a simple check
+        """Check if company has LinkedIn page via 3-tier strategy.
+
+        1. In-memory TTL cache
+        2. Proxycurl Company Resolve API (if key available + quota remaining)
+        3. Heuristic fallback (domain.replace('.', '-'))
+        """
+        # Tier 1: cache
+        cached = self._check_linkedin_cache(domain)
+        if cached is not None:
+            return cached
+
+        # Tier 2: Proxycurl API
+        api_result = await self._lookup_linkedin_api(domain)
+        if api_result is not None:
+            return api_result
+
+        # Tier 3: heuristic fallback
+        return await self._validate_linkedin_heuristic(domain)
+
+    def _check_linkedin_cache(self, domain: str) -> bool | None:
+        """Check the in-memory LinkedIn cache. Returns None on miss/expired."""
+        if domain not in self._linkedin_cache:
+            return None
+
+        company_url, _company_id, fetched_at = self._linkedin_cache[domain]
+        import time as _time
+
+        if _time.monotonic() - fetched_at > self._linkedin_cache_ttl:
+            del self._linkedin_cache[domain]
+            return None
+
+        return company_url is not None
+
+    def _is_linkedin_quota_available(self) -> bool:
+        """Check if daily Proxycurl quota is available."""
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        if today != self._linkedin_api_date:
+            self._linkedin_api_calls_today = 0
+            self._linkedin_api_date = today
+        return self._linkedin_api_calls_today < self._linkedin_daily_limit
+
+    async def _lookup_linkedin_api(self, domain: str) -> bool | None:
+        """Look up LinkedIn company via Proxycurl Resolve API."""
+        api_key = self.get_secret("LINKEDIN_API_KEY")
+        if not api_key:
+            return None
+
+        if not self._is_linkedin_quota_available():
+            self.log.debug(
+                "linkedin_quota_exhausted",
+                calls_today=self._linkedin_api_calls_today,
+                limit=self._linkedin_daily_limit,
+            )
+            return None
+
+        try:
+            import time as _time
+
+            self._linkedin_api_calls_today += 1
+
+            response = await self.http.get(
+                "https://nubela.co/proxycurl/api/linkedin/company/resolve",
+                params={"company_domain": domain},
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=15,
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                company_url = data.get("url")
+                company_id = data.get("id")
+
+                self._linkedin_cache[domain] = (
+                    company_url,
+                    company_id,
+                    _time.monotonic(),
+                )
+
+                return company_url is not None
+
+            if response.status_code == 404:
+                import time as _time
+
+                self._linkedin_cache[domain] = (None, None, _time.monotonic())
+                return False
+
+            # Unexpected status — fall through to heuristic
+            self.log.warning(
+                "linkedin_api_unexpected_status",
+                status_code=response.status_code,
+                domain=domain,
+            )
+            return None
+
+        except Exception as e:
+            self.log.debug(
+                "linkedin_api_error",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            return None
+
+    async def _validate_linkedin_heuristic(self, domain: str) -> bool | None:
+        """Heuristic fallback: check linkedin.com/company/{domain-slug}."""
         try:
             response = await self.http.get(
                 f"https://www.linkedin.com/company/{domain.replace('.', '-')}",
                 timeout=10,
-                retries=1
+                retries=1,
             )
 
             return response.status_code == 200
 
         except Exception as e:
             self.log.debug(
-                "linkedin_validation_failed",
+                "linkedin_heuristic_failed",
                 provider="linkedin",
                 domain=domain,
                 error=str(e),

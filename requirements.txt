@@ -47,6 +47,9 @@ aiosqlite>=0.20.0
 redis==5.0.0
 celery==5.3.0
 
+# Secrets Management
+hvac>=2.1.0
+
 # Retry & Rate Limiting
 tenacity==8.2.3
 

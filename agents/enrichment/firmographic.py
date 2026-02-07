@@ -7,7 +7,6 @@ from third-party providers and website scraping.
 """
 
 import asyncio
-import os
 import re
 from datetime import datetime
 
@@ -127,7 +126,7 @@ class FirmographicAgent(BaseAgent):
 
     async def _fetch_clearbit(self, domain: str) -> dict | None:
         """Fetch from Clearbit API."""
-        api_key = os.getenv("CLEARBIT_API_KEY")
+        api_key = self.get_secret("CLEARBIT_API_KEY")
         if not api_key:
             return None
 
@@ -168,7 +167,7 @@ class FirmographicAgent(BaseAgent):
 
     async def _fetch_apollo(self, domain: str) -> dict | None:
         """Fetch from Apollo API."""
-        api_key = os.getenv("APOLLO_API_KEY")
+        api_key = self.get_secret("APOLLO_API_KEY")
         if not api_key:
             return None
 
@@ -203,7 +202,7 @@ class FirmographicAgent(BaseAgent):
 
     async def _fetch_zoominfo(self, company_name: str, domain: str = None) -> dict | None:
         """Fetch from ZoomInfo API."""
-        api_key = os.getenv("ZOOMINFO_API_KEY")
+        api_key = self.get_secret("ZOOMINFO_API_KEY")
         if not api_key:
             return None
 

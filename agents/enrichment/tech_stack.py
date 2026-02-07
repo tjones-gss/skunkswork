@@ -5,7 +5,6 @@ NAM Intelligence Pipeline
 Detects ERP, CRM, MES, and other business software used by companies.
 """
 
-import os
 from urllib.parse import quote
 
 from bs4 import BeautifulSoup
@@ -151,7 +150,7 @@ class TechStackAgent(BaseAgent):
 
     async def _detect_builtwith(self, domain: str) -> dict | None:
         """Detect tech stack using BuiltWith API."""
-        api_key = os.getenv("BUILTWITH_API_KEY")
+        api_key = self.get_secret("BUILTWITH_API_KEY")
         if not api_key:
             return None
 

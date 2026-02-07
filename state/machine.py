@@ -26,6 +26,7 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -149,6 +150,12 @@ class PipelineState(BaseModel):
     # Phase history
     phase_history: list[dict] = Field(default_factory=list)
 
+    # Intra-phase progress for partial-resume (P3-T02)
+    # Stores an opaque cursor so that a restarted pipeline can skip
+    # items already processed within the current phase.
+    # Example: {"cursor": 450, "total": 1200, "last_url": "https://..."}
+    phase_progress: dict[str, Any] = Field(default_factory=dict)
+
     def transition_to(self, new_phase: PipelinePhase) -> bool:
         """
         Transition to a new pipeline phase.
@@ -181,12 +188,30 @@ class PipelineState(BaseModel):
         self.current_phase = new_phase
         self.phase_started_at = datetime.now(UTC)
         self.updated_at = datetime.now(UTC)
+        self.phase_progress = {}  # reset cursor for new phase
 
         if new_phase == PipelinePhase.DONE:
             self.completed_at = datetime.now(UTC)
 
         logger.info(f"Pipeline transitioned to phase: {new_phase}")
         return True
+
+    # --- intra-phase progress helpers (P3-T02) ---------------------------
+
+    def update_phase_progress(self, **kwargs: Any) -> None:
+        """Merge *kwargs* into the current ``phase_progress`` dict.
+
+        Typical keys: ``cursor``, ``total``, ``last_url``, ``batch_number``.
+        The dict is persisted by ``StateManager.checkpoint()`` and restored
+        on reload so the orchestrator can skip already-processed items.
+        """
+        self.phase_progress.update(kwargs)
+        self.updated_at = datetime.now(UTC)
+
+    def clear_phase_progress(self) -> None:
+        """Explicitly reset the intra-phase progress cursor."""
+        self.phase_progress = {}
+        self.updated_at = datetime.now(UTC)
 
     def add_to_queue(self, url: str, priority: int = 0, **kwargs):
         """Add URL to crawl queue."""
@@ -295,6 +320,7 @@ class PipelineState(BaseModel):
             "signals_detected": self.total_signals_detected,
             "entities_resolved": self.total_entities_resolved,
             "errors": len(self.errors),
+            "phase_progress": self.phase_progress,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -380,6 +406,7 @@ class StateManager:
             "job_id": state.job_id,
             "phase": state.current_phase.value,
             "timestamp": datetime.now(UTC).isoformat(),
+            "phase_progress": state.phase_progress,
             "summary": state.get_summary()
         }
 

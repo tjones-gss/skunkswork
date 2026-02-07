@@ -13,12 +13,14 @@ import os
 import random
 import re
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 import yaml
+from prometheus_client import Counter, Histogram
 
 # ============================================================================
 # STATE CODES
@@ -111,6 +113,141 @@ class RateLimiter:
 
 
 # ============================================================================
+# CIRCUIT BREAKER
+# ============================================================================
+
+class CircuitState(Enum):
+    """States for the circuit breaker."""
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
+
+
+class CircuitOpenError(Exception):
+    """Raised when a request is attempted on an open circuit."""
+
+    def __init__(self, domain: str, reset_time: float):
+        self.domain = domain
+        self.reset_time = reset_time
+        super().__init__(
+            f"Circuit open for {domain}, resets in {reset_time:.1f}s"
+        )
+
+
+class CircuitBreaker:
+    """Per-domain circuit breaker to avoid hammering failing hosts."""
+
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        reset_timeout: float = 60.0,
+        half_open_max_calls: int = 1,
+    ):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.half_open_max_calls = half_open_max_calls
+
+        self._states: dict[str, CircuitState] = {}
+        self._failure_counts: dict[str, int] = {}
+        self._last_failure_time: dict[str, float] = {}
+        self._half_open_calls: dict[str, int] = {}
+
+    def get_state(self, domain: str) -> CircuitState:
+        """Get current state for domain, auto-transitioning OPEN -> HALF_OPEN."""
+        state = self._states.get(domain, CircuitState.CLOSED)
+
+        if state == CircuitState.OPEN:
+            elapsed = time.time() - self._last_failure_time.get(domain, 0)
+            if elapsed >= self.reset_timeout:
+                self._states[domain] = CircuitState.HALF_OPEN
+                self._half_open_calls[domain] = 0
+                return CircuitState.HALF_OPEN
+
+        return state
+
+    def check(self, domain: str) -> None:
+        """Check if request is allowed. Raises CircuitOpenError if OPEN."""
+        state = self.get_state(domain)
+
+        if state == CircuitState.OPEN:
+            elapsed = time.time() - self._last_failure_time.get(domain, 0)
+            remaining = max(0, self.reset_timeout - elapsed)
+            raise CircuitOpenError(domain, remaining)
+
+        if state == CircuitState.HALF_OPEN:
+            if self._half_open_calls.get(domain, 0) >= self.half_open_max_calls:
+                elapsed = time.time() - self._last_failure_time.get(domain, 0)
+                remaining = max(0, self.reset_timeout - elapsed)
+                raise CircuitOpenError(domain, remaining)
+            self._half_open_calls[domain] = self._half_open_calls.get(domain, 0) + 1
+
+    def record_success(self, domain: str) -> None:
+        """Record a successful request. HALF_OPEN -> CLOSED."""
+        state = self._states.get(domain, CircuitState.CLOSED)
+
+        if state == CircuitState.HALF_OPEN:
+            self._states[domain] = CircuitState.CLOSED
+
+        self._failure_counts[domain] = 0
+
+    def record_failure(self, domain: str) -> None:
+        """Record a failed request. CLOSED -> OPEN at threshold, HALF_OPEN -> OPEN."""
+        state = self._states.get(domain, CircuitState.CLOSED)
+        self._failure_counts[domain] = self._failure_counts.get(domain, 0) + 1
+        self._last_failure_time[domain] = time.time()
+
+        if state == CircuitState.HALF_OPEN:
+            self._states[domain] = CircuitState.OPEN
+            return
+
+        if self._failure_counts[domain] >= self.failure_threshold:
+            self._states[domain] = CircuitState.OPEN
+
+    def reset(self, domain: str | None = None) -> None:
+        """Reset circuit breaker state for a domain, or all domains if None."""
+        if domain is None:
+            self._states.clear()
+            self._failure_counts.clear()
+            self._last_failure_time.clear()
+            self._half_open_calls.clear()
+        else:
+            self._states.pop(domain, None)
+            self._failure_counts.pop(domain, None)
+            self._last_failure_time.pop(domain, None)
+            self._half_open_calls.pop(domain, None)
+
+
+# ============================================================================
+# PROMETHEUS METRICS
+# ============================================================================
+
+HTTP_REQUESTS_TOTAL = Counter(
+    "nam_http_requests_total",
+    "Total HTTP requests by domain, method, and status",
+    ["domain", "method", "status"],
+)
+
+HTTP_REQUEST_DURATION = Histogram(
+    "nam_http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["domain", "method"],
+    buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0],
+)
+
+HTTP_ERRORS_TOTAL = Counter(
+    "nam_http_errors_total",
+    "Total HTTP errors by domain, method, and error type",
+    ["domain", "method", "error_type"],
+)
+
+
+def get_metrics_text() -> str:
+    """Export all Prometheus metrics as text."""
+    from prometheus_client import REGISTRY, generate_latest
+    return generate_latest(REGISTRY).decode("utf-8")
+
+
+# ============================================================================
 # ASYNC HTTP CLIENT
 # ============================================================================
 
@@ -130,8 +267,13 @@ class AsyncHTTPClient:
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NAM-IntelBot/1.0"
     )
 
-    def __init__(self, rate_limiter: RateLimiter = None):
+    def __init__(
+        self,
+        rate_limiter: RateLimiter = None,
+        circuit_breaker: CircuitBreaker = None,
+    ):
         self.rate_limiter = rate_limiter or RateLimiter()
+        self.circuit_breaker = circuit_breaker or CircuitBreaker()
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -185,12 +327,15 @@ class AsyncHTTPClient:
         timeout: int = None,
         retries: int = None
     ) -> httpx.Response:
-        """Make HTTP request with rate limiting and retries."""
+        """Make HTTP request with rate limiting, circuit breaker, and retries."""
         client = await self._get_client()
         domain = urlparse(url).netloc
 
         retries = retries if retries is not None else self.DEFAULT_RETRIES
         timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
+
+        # Circuit breaker check before retry loop
+        self.circuit_breaker.check(domain)
 
         last_error = None
 
@@ -199,7 +344,8 @@ class AsyncHTTPClient:
                 # Rate limit
                 await self.rate_limiter.acquire(domain)
 
-                # Make request
+                # Make request with timing
+                start_time = time.time()
                 response = await client.request(
                     method,
                     url,
@@ -209,8 +355,15 @@ class AsyncHTTPClient:
                     headers=headers,
                     timeout=timeout,
                 )
+                duration = time.time() - start_time
 
-                # Handle rate limiting
+                # Record metrics
+                HTTP_REQUEST_DURATION.labels(domain=domain, method=method).observe(duration)
+                HTTP_REQUESTS_TOTAL.labels(
+                    domain=domain, method=method, status=str(response.status_code)
+                ).inc()
+
+                # Handle rate limiting (429 tracked in requests_total, NOT errors)
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", 60))
                     await asyncio.sleep(retry_after)
@@ -218,6 +371,12 @@ class AsyncHTTPClient:
 
                 # Handle retryable server errors (5xx)
                 if response.status_code in self.RETRYABLE_STATUS_CODES:
+                    HTTP_ERRORS_TOTAL.labels(
+                        domain=domain, method=method,
+                        error_type=f"http_{response.status_code}",
+                    ).inc()
+                    self.circuit_breaker.record_failure(domain)
+
                     last_error = httpx.HTTPStatusError(
                         f"Server error {response.status_code}",
                         request=response.request,
@@ -232,9 +391,19 @@ class AsyncHTTPClient:
                         continue
                     return response  # Return last response if all retries exhausted
 
+                # Success
+                self.circuit_breaker.record_success(domain)
                 return response
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
+                duration = time.time() - start_time
+                HTTP_REQUEST_DURATION.labels(domain=domain, method=method).observe(duration)
+                HTTP_ERRORS_TOTAL.labels(
+                    domain=domain, method=method,
+                    error_type=type(e).__name__,
+                ).inc()
+                self.circuit_breaker.record_failure(domain)
+
                 last_error = e
                 if attempt < retries:
                     wait = min(

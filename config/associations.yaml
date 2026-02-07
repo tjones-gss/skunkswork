@@ -1,11 +1,32 @@
 associations:
   PMA:
     name: "Precision Metalforming Association"
-    url: "https://pma.org"
-    directory_url: "https://pma.org/directory/results.asp?n=2000"
-    expected_members: 1134
+    url: "https://www.pma.org"
+    # PMA's central directory search (results.asp) is defunct.
+    # Members are listed on per-district pages at /{district}/member-list.asp.
+    directory_url: "https://www.pma.org/directory/default.asp"
+    district_urls:
+      - "https://www.pma.org/california/member-list.asp"
+      - "https://www.pma.org/canada/member-list.asp"
+      - "https://www.pma.org/chicago/member-list.asp"
+      - "https://www.pma.org/cleveland/member-list.asp"
+      - "https://www.pma.org/east-michigan/member-list.asp"
+      - "https://www.pma.org/indiana/member-list.asp"
+      - "https://www.pma.org/lone-star/member-list.asp"
+      - "https://www.pma.org/mexico/member-list.asp"
+      - "https://www.pma.org/mid-atlantic/member-list.asp"
+      - "https://www.pma.org/new-england/member-list.asp"
+      - "https://www.pma.org/ohio-valley/member-list.asp"
+      - "https://www.pma.org/southeast/member-list.asp"
+      - "https://www.pma.org/southern-new-england/member-list.asp"
+      - "https://www.pma.org/tennessee/member-list.asp"
+      - "https://www.pma.org/twin-cities/member-list.asp"
+      - "https://www.pma.org/west-michigan/member-list.asp"
+      - "https://www.pma.org/wisconsin/member-list.asp"
+    expected_members: 900
     priority: "high"
     schema: "pma"
+    extraction_mode: "district_directories"
     
   NEMA:
     name: "National Electrical Manufacturers Association"

@@ -1,60 +1,56 @@
 # PMA (Precision Metalforming Association) Extraction Schema
-# Directory URL: https://pma.org/directory/results.asp?n=2000
+# District member-list pages at /{district}/member-list.asp
+#
+# Actual DOM structure (verified 2026-02-07):
+#   Each company is wrapped in its own <ul class="icons row-fluid">
+#   with a single <li class="span4"> child:
+#
+#   <ul class="icons row-fluid">
+#     <li class="span4">
+#       <i class="icon-chevron-right red"></i>
+#       <a href="/directory/profile.asp?id=XXXXXXXX">Company Name</a>
+#       &nbsp; <span>|</span> &nbsp;
+#       <cite>City, ST</cite>
+#     </li>
+#   </ul>
 
 pma:
   extends: default
 
-  # PMA uses a table-based directory
-  list_container: "table.directory-results"
-  list_item: "tr"
+  # Each member is in its own <ul>, so we search the whole page for list items
+  list_container: "body"
+  list_item: "ul.icons.row-fluid li.span4"
 
   company_name:
     selectors:
-      - "td.company-name"
-      - "a.member-link"
-      - "td:first-child a"
-      - "td:first-child"
+      - "a[href*='profile.asp']"
+      - "a[href*='directory']"
+      - "a"
     required: true
 
+  # District list pages don't contain company websites — override default
+  # to prevent profile.asp links from being captured as website URLs.
   website:
     selectors:
-      - "td a[href*='http']:not([href*='pma.org'])"
-      - ".website-link"
-    extract: "href"
-    parser: "url"
+      - "a[href*='http']:not([href*='pma.org'])"
 
   city:
     selectors:
-      - "td.city"
-      - "td:nth-child(3)"
-    parser: "title_case"
+      - "cite"
+    parser: "pma_city"
 
   state:
     selectors:
-      - "td.state"
-      - "td:nth-child(4)"
-    parser: "state_code"
+      - "cite"
+    parser: "pma_state"
 
-  membership_tier:
+  profile_url:
     selectors:
-      - "td.membership-type"
-      - ".tier"
-    mapping:
-      "P": "Platinum"
-      "G": "Gold"
-      "S": "Silver"
-      "B": "Bronze"
-      "A": "Associate"
-      "N": "New"
+      - "a[href*='profile.asp']"
+    extract: "href"
 
-  phone:
+  member_id:
     selectors:
-      - "td.phone"
-      - "td:contains('(')"
-    parser: "phone"
-
-  # PMA-specific fields
-  products:
-    selectors:
-      - "td.products"
-      - ".product-categories"
+      - "a[href*='profile.asp']"
+    extract: "href"
+    parser: "pma_member_id"

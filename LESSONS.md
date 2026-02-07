@@ -28,9 +28,9 @@ Lessons learned across multiple Claude Code sessions building the NAM Intelligen
 - **Fix:** Build a schema store that maps `$id` URIs to schema contents, then pass it to `RefResolver`. See `contracts/validator.py:_build_schema_store()`.
 - **Pattern:** Scan all `.json` files in the schemas directory, extract `$id` from each, and create a `{id: schema}` mapping. Also map `file://` URIs for relative path resolution.
 
-### `RefResolver` is deprecated in jsonschema 4.18+
-- **Current state:** Works fine with `jsonschema>=4.20.0` but emits deprecation warnings.
-- **Migration path:** Replace `RefResolver` with the `referencing` library. Not urgent but should be done before `jsonschema` 5.x drops support.
+### `RefResolver` is deprecated in jsonschema 4.18+ (MIGRATED)
+- **Problem:** `RefResolver` emits deprecation warnings and will be removed in jsonschema 5.x.
+- **Fix (completed 2026-02-07):** Migrated to `referencing.Registry`. Replace `RefResolver` import with `from referencing import Registry, Resource`. Wrap schemas in `Resource.from_contents()`, pass `registry=` kwarg to validator instead of `resolver=`.
 
 ---
 
@@ -110,10 +110,10 @@ Lessons learned across multiple Claude Code sessions building the NAM Intelligen
   - `orm_mode` -> `from_attributes`
 - These are warnings only (still functional in Pydantic 2.x) but should be cleaned up.
 
-### jsonschema migration path
-- Current: `jsonschema>=4.20.0` with deprecated `RefResolver`
-- Future: Migrate to `referencing` library for `$ref` resolution
-- Timeline: Before `jsonschema` 5.x release (no announced date yet)
+### jsonschema migration path (COMPLETED)
+- Migrated from `jsonschema.RefResolver` to `referencing.Registry` (2026-02-07)
+- Uses `DRAFT202012.create_resource()` for schemas without `$schema` key
+- Schemas with `$schema` use `Resource.from_contents()` with auto-detection
 
 ---
 
@@ -145,3 +145,35 @@ Lessons learned across multiple Claude Code sessions building the NAM Intelligen
 4. **Don't trust external API data blindly** — Clearbit/Apollo/ZoomInfo can return stale or incorrect data. Cross-reference when possible.
 5. **Don't commit `.env`** — it contains real API keys. Use `.env.example` as a template.
 6. **Don't run the full pipeline without `--dry-run` first** — especially after code changes.
+
+---
+
+## CI/CD & Docker
+
+### Dockerfile: npx is not available in multi-stage runtime
+- **Problem:** When copying only `/usr/bin/node` and `node_modules/` from the builder stage (not the full Node.js installation), `npx` is not available in the runtime image.
+- **Fix:** Call Playwright CLI directly: `RUN /usr/bin/node node_modules/playwright/cli.js install chromium` instead of `RUN npx playwright install chromium`.
+
+### Selective COPY is better than `COPY . .` in Dockerfiles
+- **Problem:** `COPY . .` pulls in tests, docs, config files, and other artifacts that bloat the image and can leak sensitive info.
+- **Fix:** Use explicit `COPY agents/ ./agents/` etc. for each production directory. Combine with `.dockerignore` as a safety net.
+
+### Makefile platform detection for Windows vs Unix
+- **Problem:** `find`, `rm -rf`, `python3` don't exist on Windows. `python`, `del`, `for /d /r` don't exist on Unix.
+- **Fix:** Use `ifeq ($(OS),Windows_NT)` to branch on platform. Define `PYTHON`, `PIP`, `RM_PYCACHE`, `RM_PYC` per platform.
+
+### Playwright browser caching in GitHub Actions
+- **Problem:** Playwright downloads ~150MB of browser binaries on every CI run.
+- **Fix:** Cache `~/.cache/ms-playwright` with `actions/cache@v4`. Use conditional steps: `playwright install chromium --with-deps` on cache miss, `playwright install-deps chromium` (system libs only) on cache hit.
+
+### Coverage config belongs in pyproject.toml
+- **Problem:** Coverage source/omit/fail_under flags repeated across CI, Makefile, and docker-compose.
+- **Fix:** Add `[tool.coverage.run]` and `[tool.coverage.report]` sections to `pyproject.toml`. CLI flags still override when needed, but the defaults are centralized.
+
+### pre-commit hook versions should be pinned and updated together
+- **Problem:** Stale hook versions miss new rules and bug fixes.
+- **Fix:** Update ruff-pre-commit and pre-commit-hooks versions explicitly. Add `--exit-non-zero-on-fix` to ruff so CI fails if auto-fixes are needed (forces developers to commit clean code).
+
+### Redis in docker-compose for future-proofing
+- **Why:** Pipeline will need Redis for rate-limit coordination, distributed task queues, and caching enrichment API responses.
+- **Pattern:** Add healthcheck (`redis-cli ping`) and `condition: service_healthy` dependency. Use tmpfs in test compose for fast ephemeral storage.

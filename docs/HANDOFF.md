@@ -4,7 +4,62 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-05 (Session 3)
+## Latest Session: 2026-02-07 (Session 8) — CI/CD Infrastructure Upgrade
+
+### Session Summary
+
+Upgraded all 10 CI/CD infrastructure files from simplified scaffolds to production-ready configurations. Added Node.js/Playwright setup to CI, multi-stage Docker build with nodesource, Redis service, platform-aware Makefile, centralized coverage config, and expanded pre-commit hooks.
+
+### Completed This Session
+
+- [x] **`.github/workflows/ci.yml`** — Added setup-node@v4 (Node 20), Playwright browser cache with conditional install, npm ci, changed coverage to include middleware
+- [x] **`Dockerfile`** — Added curl to builder, Node.js 20 via nodesource, npm ci --production, Chromium system deps (libnss3, libatk, etc.), tesseract-ocr, poppler-utils, selective COPY, logs/ directory, direct Playwright CLI call (no npx)
+- [x] **`docker-compose.yml`** — Added redis:7-alpine with healthcheck, redisdata volume, logs mount, REDIS_URL env var
+- [x] **`docker-compose.test.yml`** — Added redis with tmpfs, coverage flags in entrypoint
+- [x] **`.dockerignore`** — Added README.md, CLAUDE.md, LESSONS.md, docs/, .ruff_cache/, .tox/, .pre-commit-config.yaml, tests/
+- [x] **`Makefile`** — Added Windows/Unix platform detection, dev-setup + test-docker targets, middleware coverage
+- [x] **`pyproject.toml`** — Added [tool.coverage.run] and [tool.coverage.report] sections
+- [x] **`.pre-commit-config.yaml`** — Updated ruff to v0.9.3 + --exit-non-zero-on-fix, hooks to v5.0.0, added check-json, check-toml, mixed-line-ending
+- [x] **`scripts/healthcheck.py`** — Added middleware.policy import, config/ and data/ directory checks, removed db.models import
+
+### Test Results
+
+```
+1,180 passed, 0 skipped (48.26s)
+All YAML files parse correctly
+pyproject.toml validates
+healthcheck.py syntax OK
+```
+
+### Files Modified
+
+- `.github/workflows/ci.yml` - Node + Playwright caching
+- `Dockerfile` - Full multi-stage with nodesource + selective COPY
+- `docker-compose.yml` - Redis service + logs volume
+- `docker-compose.test.yml` - Redis + coverage flags
+- `.dockerignore` - 8 new exclusions
+- `Makefile` - Platform detection + new targets
+- `pyproject.toml` - Coverage config sections
+- `.pre-commit-config.yaml` - Updated versions + hooks
+- `scripts/healthcheck.py` - Middleware import + directory checks
+
+### Key Decisions
+
+1. **No npx in runtime image**: Builder copies only `/usr/bin/node` + `node_modules/`, not the full Node install. Playwright CLI called directly via `node node_modules/playwright/cli.js`.
+2. **User restored db/models coverage**: Plan said to replace `--cov=db --cov=models` with `--cov=middleware`, but user's linter/edit added db/models back alongside middleware.
+3. **Redis added proactively**: Not yet used by application code but ready for rate-limit coordination and enrichment API caching.
+
+### Next Session Priorities
+
+1. Enrich extracted PMA records (firmographic, tech stack, contacts)
+2. Run live extraction on NEMA, SOCMA, AGMA
+3. Integration tests with real PostgreSQL (docker-compose.test.yml)
+4. Performance/load testing for concurrent agent spawning
+5. Clean up Pydantic V2 deprecation warnings
+
+---
+
+## Previous Session: 2026-02-05 (Session 3)
 
 ### Session Summary
 
@@ -211,37 +266,39 @@ docs/
 
 ---
 
-## Next Session Priorities
+## Next Session Priorities (Updated 2026-02-07)
 
-### Priority 1: Code Quality
-1. Update deprecated `datetime.utcnow()` calls to `datetime.now(datetime.UTC)`
-   - Currently generates ~388 warnings during tests
-2. Increase coverage on `contracts/validator.py` (CLI main function untested)
+### Priority 1: Data Enrichment
+1. Run firmographic enrichment on the 1,064 PMA companies
+2. Run tech stack detection (BuiltWith API)
+3. Run contact finder (Apollo/ZoomInfo)
 
-### Priority 2: Agent Tests
-1. Add tests for `agents/base.py` (AgentSpawner, BaseAgent)
-2. Add HTTP mocking tests for actual agent implementations
+### Priority 2: Additional Association Extraction
+1. NEMA, SOCMA, AGMA live extraction
+2. Adapt district-page pattern if needed per association
 
-### Priority 3: Validation Run
-1. Run dry-run with sample association:
-   ```bash
-   python -m agents.orchestrator --mode full -a PMA --dry-run
-   ```
-2. Verify all phases complete
-3. Check provenance preserved
+### Priority 3: Integration Testing
+1. Test with real PostgreSQL via docker-compose.test.yml
+2. End-to-end pipeline run with --persist-db flag
 
-### Priority 4: Documentation Expansion
-1. Expand `skills/validation/SKILL.md` (currently sparse)
-2. Update agent docstrings to reference contracts
+### Priority 4: Code Quality
+1. Clean up Pydantic V2 deprecation warnings (ConfigDict migration)
+2. Install ruff in venv for local linting
 
-### Priority 5: RefResolver Deprecation (Future)
-The `jsonschema.RefResolver` is deprecated as of v4.18.0. Consider migrating to the `referencing` library for more compliant referencing behavior. Low priority as current implementation works correctly.
+### Completed Priorities (from earlier sessions)
+- ~~datetime.utcnow() deprecation~~ (fixed 2026-02-05)
+- ~~RefResolver deprecation~~ (migrated to referencing.Registry 2026-02-07)
+- ~~Agent tests~~ (1,180 tests, 94-96% coverage)
+- ~~CI/CD infrastructure~~ (GitHub Actions, Docker, pre-commit)
 
 ---
 
 ## Blockers
 
-None currently. The `$ref` resolution issue was fixed in Session 3.
+None currently. All prior blockers resolved:
+- `$ref` resolution fixed in Session 3
+- RefResolver deprecation migrated in Session 8
+- CI/CD infrastructure fully upgraded in Session 8
 
 ---
 
@@ -263,11 +320,11 @@ Using JSON Schema Draft 2020-12 for:
 - `format` validators (uri, email, date-time)
 - Proper null handling with `["string", "null"]`
 
-### $ref Resolution (Schema Store)
+### $ref Resolution (referencing.Registry)
 
-The `ContractValidator` builds a schema store that maps all `$id` URIs to their schema contents. This enables resolution of absolute URIs like `https://nam-pipeline/contracts/schemas/core/contact.json` when schemas reference each other via `$ref`.
+The `ContractValidator` builds a `referencing.Registry` that maps all `$id` URIs to their schema contents. This enables resolution of absolute URIs like `https://nam-pipeline/contracts/schemas/core/contact.json` when schemas reference each other via `$ref`.
 
-The store is built lazily on first validator creation and cached for performance. Implementation in `contracts/validator.py:_build_schema_store()`.
+The registry is built lazily on first validator creation and cached for performance. Implementation in `contracts/validator.py:_build_registry()`. Migrated from deprecated `RefResolver` to `referencing.Registry` on 2026-02-07.
 
 ### Dependencies
 
@@ -276,18 +333,9 @@ The validator requires `jsonschema` library (now added to `requirements.txt`):
 jsonschema>=4.20.0
 ```
 
-### datetime Deprecation Warning
+### ~~datetime Deprecation Warning~~ (FIXED 2026-02-05)
 
-The codebase uses deprecated `datetime.utcnow()`. Python 3.12+ recommends:
-```python
-# Old (deprecated)
-datetime.utcnow()
-
-# New (recommended)
-datetime.now(datetime.UTC)
-```
-
-This generates ~388 warnings during tests but doesn't affect functionality.
+All `datetime.utcnow()` calls migrated to `datetime.now(UTC)`. No more deprecation warnings.
 
 ### Virtual Environment
 

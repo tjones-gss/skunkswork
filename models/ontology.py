@@ -218,7 +218,7 @@ class Company(BaseModel):
     def add_provenance(self, provenance: Provenance):
         """Add a provenance record."""
         self.provenance.append(provenance)
-        self.updated_at = datetime.now(UTC)()
+        self.updated_at = datetime.now(UTC)
 
     def merge_from(self, other: "Company", overwrite: bool = False):
         """Merge data from another company record."""
@@ -242,7 +242,7 @@ class Company(BaseModel):
 
         # Always merge provenance
         self.provenance.extend(other.provenance)
-        self.updated_at = datetime.now(UTC)()
+        self.updated_at = datetime.now(UTC)
 
 
 class Event(BaseModel):

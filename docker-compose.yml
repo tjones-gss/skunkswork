@@ -5,10 +5,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
     environment:
       - DATABASE_URL=postgresql://nam_user:nam_pass@postgres:5432/nam_intel
+      - REDIS_URL=redis://redis:6379/0
 
   postgres:
     image: postgres:16-alpine
@@ -26,6 +30,18 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:
@@ -41,3 +57,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

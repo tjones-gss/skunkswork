@@ -33,7 +33,7 @@ openpyxl>=3.1.2
 dnspython==2.4.2
 
 # Fuzzy Matching
-rapidfuzz==3.5.0
+rapidfuzz>=3.5.0
 python-Levenshtein==0.23.0
 
 # Database

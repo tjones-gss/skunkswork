@@ -4,7 +4,58 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-07 (Session 10) — WBS Phase 1-2 Completion (5 Tasks)
+## Latest Session: 2026-02-07 (Session 11) — Commit Backlog, Quick Wins, Circuit Breaker + Prometheus
+
+### Session Summary
+
+Committed Session 10 backlog (34 files), completed 3 quick wins (Pydantic V2 ConfigDict, camelot-py dep fix, 770+ ruff auto-fixes to 0 violations), then implemented P2-T01 (Prometheus metrics) and P2-T02 (Circuit Breaker) — completing all 6/6 Phase 2 WBS tasks.
+
+### Completed This Session
+
+- [x] **Commit Session 10 backlog** — Staged 31 modified + 3 untracked files. Added `.playwright-mcp/` to `.gitignore`.
+- [x] **Quick Win: Pydantic V2 ConfigDict** — Migrated `Provenance.Config` to `model_config = ConfigDict(json_encoders=...)`. Eliminates class-based Config deprecation warning.
+- [x] **Quick Win: camelot-py dep fix** — Removed `[base]` extra from `camelot-py==0.11.0` (pdftopng>=0.2.3 unavailable on PyPI).
+- [x] **Quick Win: Ruff auto-fix** — Fixed 770+ E/F/W/I violations via `ruff check . --fix --unsafe-fixes`. Changed bare `except:` to `except Exception:` in event_extractor.py. Added `# noqa: F401` for intentional availability-check imports. **0 ruff violations remaining.**
+- [x] **P2-T02: Circuit Breaker** — Added `CircuitState` enum, `CircuitOpenError` exception, `CircuitBreaker` class (per-domain, configurable threshold/timeout/half-open). Integrated into `AsyncHTTPClient._request()`: 5xx/timeouts trip circuit, 429 does NOT, 2xx records success.
+- [x] **P2-T01: Prometheus Metrics** — Added `nam_http_requests_total` Counter, `nam_http_request_duration_seconds` Histogram, `nam_http_errors_total` Counter. Instrumented `_request()`. Added `get_metrics_text()` export function.
+
+### Test Results
+
+```
+1,264 passed, 0 failed, 1 warning (41.35s)
++24 new tests (12 circuit breaker unit, 4 CB integration, 8 Prometheus metrics)
+Ruff: 0 violations
+```
+
+### Files Modified
+
+- `.gitignore` — Added `.playwright-mcp/` entry
+- `models/ontology.py` — ConfigDict migration (Pydantic V2), ruff cleanup (Optional→X|None)
+- `requirements.txt` — Removed `[base]` from camelot-py
+- `skills/common/SKILL.py` — Added CircuitBreaker class, Prometheus metrics, instrumented `_request()`
+- `tests/test_http_client_retry.py` — 24 new tests (CB unit + integration, metrics)
+- `agents/extraction/event_extractor.py` — `except:` → `except Exception:` (E722)
+- `contracts/validator.py` — `# noqa: F401` for jsonschema import
+- `scripts/export_excel.py`, `scripts/extract_all.py` — `# noqa: F401` for availability-check imports
+- 70+ files — ruff auto-fix (import sorting, unused imports, whitespace, Optional→X|None)
+
+### Key Decisions
+
+1. **Circuit breaker placement**: CB check happens BEFORE retry loop — if circuit is open, request fails fast without consuming retries.
+2. **429 ≠ circuit failure**: Rate limits (429) are transient and expected; they should not trip the circuit breaker. Only 5xx and connection/timeout errors count.
+3. **Prometheus metrics as module-level singletons**: Counters/Histograms are module-level so they persist across client instances and can be exported via `get_metrics_text()`.
+4. **Ruff unsafe-fixes**: Used `--unsafe-fixes` to remove F841 unused variables from test mocks. All changes verified with passing tests.
+
+### Next Session Priorities
+
+1. Run live extraction on SOCMA, AGMA, AIA
+2. Enrich PMA+NEMA records (firmographic, tech stack, contacts)
+3. Test remaining untested modules (export_activation, event_extractor, etc.)
+4. Phase 3 WBS tasks (if defined)
+
+---
+
+## Previous Session: 2026-02-07 (Session 10) — WBS Phase 1-2 Completion (5 Tasks)
 
 ### Session Summary
 

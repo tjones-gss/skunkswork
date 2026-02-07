@@ -230,7 +230,7 @@ class SiteMapperAgent(BaseAgent):
         indicators = [
             "member" in text and ("directory" in text or "list" in text),
             len(soup.find_all("a", href=True)) > 20,  # Many links
-            soup.find(class_=re.compile(r"member|company|directory", re.I)),
+            soup.find(class_=re.compile(r"member|company|directory", re.I)) is not None,
             len(soup.find_all(["li", "tr", "div"], class_=True)) > 10,
         ]
 

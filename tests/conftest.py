@@ -1399,3 +1399,153 @@ def exhibitors_page_html() -> str:
 </body>
 </html>
 """
+
+
+# =============================================================================
+# PDF PARSER FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def sample_pdf_table():
+    """Table data with Company/City/State/Phone headers."""
+    return [
+        ["Company Name", "City", "State", "Phone"],
+        ["Acme Manufacturing Inc", "Detroit", "MI", "(555) 123-4567"],
+        ["Beta Industries LLC", "Chicago", "IL", "(555) 987-6543"],
+        ["Gamma Systems Corp", "Cleveland", "OH", "(555) 456-7890"],
+    ]
+
+
+@pytest.fixture
+def sample_pdf_text():
+    """Multi-block text with company entries."""
+    return """Acme Manufacturing Inc
+Detroit, MI 48201
+(555) 123-4567
+info@acme-mfg.com
+www.acme-mfg.com
+
+Beta Industries LLC
+Chicago, IL 60601
+(555) 987-6543
+contact@beta-ind.com
+
+Gamma Systems Corp
+Cleveland, OH 44101
+(555) 456-7890
+"""
+
+
+@pytest.fixture
+def sample_pdf_header_variations():
+    """All 22 header->field mappings for parametrized tests."""
+    return {
+        "company": "company_name",
+        "company name": "company_name",
+        "name": "company_name",
+        "member": "company_name",
+        "member name": "company_name",
+        "organization": "company_name",
+        "city": "city",
+        "state": "state",
+        "st": "state",
+        "province": "state",
+        "country": "country",
+        "phone": "phone",
+        "telephone": "phone",
+        "email": "email",
+        "e-mail": "email",
+        "website": "website",
+        "web": "website",
+        "url": "website",
+        "membership": "membership_tier",
+        "membership type": "membership_tier",
+        "type": "membership_tier",
+        "joined": "member_since",
+        "member since": "member_since",
+        "year joined": "member_since",
+    }
+
+
+@pytest.fixture
+def mock_pdfplumber_pdf():
+    """Factory fixture creating mocked pdfplumber PDF objects."""
+    def _create(pages_data=None):
+        mock_pdf = MagicMock()
+        pages = []
+        for page_data in (pages_data or []):
+            mock_page = MagicMock()
+            mock_page.extract_tables.return_value = page_data.get("tables", [])
+            mock_page.extract_text.return_value = page_data.get("text", "")
+            pages.append(mock_page)
+        mock_pdf.pages = pages
+        mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
+        mock_pdf.__exit__ = MagicMock(return_value=False)
+        return mock_pdf
+    return _create
+
+
+# =============================================================================
+# HTML PARSER EXTENDED FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def inline_directory_html():
+    """HTML with mix of external, social, internal links for auto-extract tests."""
+    return """
+<!DOCTYPE html>
+<html>
+<head><title>Our Members</title></head>
+<body>
+    <h1>Member Companies</h1>
+    <ul>
+        <li><a href="https://acme-mfg.com">Acme Manufacturing Inc</a></li>
+        <li><a href="https://www.beta-industries.com">Beta Industries*</a></li>
+        <li><a href="https://gamma-systems.com">Gamma Systems Corp</a></li>
+        <li><a href="https://www.facebook.com/pma">Follow us on Facebook</a></li>
+        <li><a href="https://twitter.com/pma">Twitter</a></li>
+        <li><a href="https://www.linkedin.com/company/pma">LinkedIn</a></li>
+        <li><a href="/about">About Us</a></li>
+        <li><a href="/contact">Contact</a></li>
+        <li><a href="https://pma.org/events">Events</a></li>
+        <li><a href="https://acme-mfg.com/products">Acme Products</a></li>
+        <li><a href="https://delta-corp.com">Delta Corp</a></li>
+        <li><a href="#">Empty Link</a></li>
+        <li><a href="mailto:info@pma.org">Email Us</a></li>
+        <li><a href="tel:+15551234567">Call Us</a></li>
+        <li><a href="javascript:void(0)">JS Link</a></li>
+        <li><a href="https://www.youtube.com/pma">YouTube</a></li>
+    </ul>
+</body>
+</html>
+"""
+
+
+@pytest.fixture
+def schema_with_mapping():
+    """Schema dict with mapping config for field value translation."""
+    return {
+        "company_name": {"selectors": ["h1.company-name"]},
+        "membership_tier": {
+            "selectors": [".tier"],
+            "mapping": {
+                "P": "Platinum",
+                "G": "Gold",
+                "S": "Silver",
+            }
+        }
+    }
+
+
+@pytest.fixture
+def schema_with_enum():
+    """Schema dict with enum config for field validation."""
+    return {
+        "company_name": {"selectors": ["h1.company-name"]},
+        "state": {
+            "selectors": [".state"],
+            "enum": ["MI", "OH", "IL", "IN", "PA"]
+        }
+    }

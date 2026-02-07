@@ -17,12 +17,16 @@ from pydantic import BaseModel
 # Try to import jsonschema, fall back gracefully if not available
 try:
     import jsonschema
-    from jsonschema import Draft202012Validator, RefResolver
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
+    from referencing.jsonschema import DRAFT202012
     JSONSCHEMA_AVAILABLE = True
 except ImportError:
     JSONSCHEMA_AVAILABLE = False
     Draft202012Validator = None
-    RefResolver = None
+    Registry = None
+    Resource = None
+    DRAFT202012 = None
 
 
 logger = logging.getLogger(__name__)
@@ -74,7 +78,7 @@ class ContractValidator:
         self.contracts_dir = contracts_dir or CONTRACTS_DIR
         self._schema_cache: dict[str, dict] = {}
         self._validator_cache: dict[str, Any] = {}
-        self._schema_store: Dict[str, Any] = None  # Lazy-loaded schema store
+        self._registry: Optional[Any] = None  # Lazy-loaded referencing Registry
 
     def _load_schema(self, schema_path: str) -> dict:
         """Load a schema from file, using cache."""
@@ -96,32 +100,40 @@ class ContractValidator:
         self._schema_cache[schema_path] = schema
         return schema
 
-    def _build_schema_store(self) -> Dict[str, Any]:
-        """Build a schema store mapping $id URIs to schema contents.
+    def _build_registry(self) -> Any:
+        """Build a referencing.Registry mapping $id URIs to schema resources.
 
-        This enables resolution of absolute $id URIs (e.g., https://nam-pipeline/...)
-        when validating schemas that use $ref to reference other schemas.
+        This enables resolution of $ref URIs (e.g., ./contact.json resolved
+        relative to the schema's $id) when validating schemas.
         """
-        if self._schema_store is not None:
-            return self._schema_store
+        if self._registry is not None:
+            return self._registry
 
-        store = {}
+        resources = []
         schemas_dir = self.contracts_dir
 
         for schema_file in schemas_dir.rglob("*.json"):
             try:
                 with open(schema_file, "r", encoding="utf-8") as f:
                     schema = json.load(f)
+
+                # Create resource - use auto-detect if $schema present,
+                # otherwise explicitly use DRAFT202012
+                if "$schema" in schema:
+                    resource = Resource.from_contents(schema)
+                else:
+                    resource = DRAFT202012.create_resource(schema)
+
                 if "$id" in schema:
-                    store[schema["$id"]] = schema
-                # Also add file:// URI for relative resolution
+                    resources.append((schema["$id"], resource))
+                # Also register under file:// URI for relative resolution
                 file_uri = f"file://{schema_file.as_posix()}"
-                store[file_uri] = schema
+                resources.append((file_uri, resource))
             except Exception as e:
                 logger.warning(f"Failed to load schema {schema_file}: {e}")
 
-        self._schema_store = store
-        return store
+        self._registry = Registry().with_resources(resources)
+        return self._registry
 
     def _get_validator(self, schema_path: str) -> Any:
         """Get or create a validator for a schema."""
@@ -134,18 +146,10 @@ class ContractValidator:
 
         schema = self._load_schema(schema_path)
 
-        # Build schema store for $ref resolution
-        store = self._build_schema_store()
+        # Build registry for $ref resolution
+        registry = self._build_registry()
 
-        # Create resolver with schema store for $ref support
-        schema_dir = (self.contracts_dir / schema_path).parent
-        resolver = RefResolver(
-            base_uri=f"file://{schema_dir.as_posix()}/",
-            referrer=schema,
-            store=store
-        )
-
-        validator = Draft202012Validator(schema, resolver=resolver)
+        validator = Draft202012Validator(schema, registry=registry)
         self._validator_cache[schema_path] = validator
 
         return validator

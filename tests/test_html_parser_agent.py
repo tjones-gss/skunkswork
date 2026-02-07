@@ -807,3 +807,692 @@ class TestHTMLParserAgentMetadata:
         assert "extracted_at" in result["records"][0]
         # Should be ISO format timestamp
         assert "T" in result["records"][0]["extracted_at"]
+
+
+# =============================================================================
+# TEST XPATH EXTRACTION
+# =============================================================================
+
+
+class TestHTMLParserXPathExtraction:
+    """Tests for XPath selector extraction."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_basic_xpath_extraction(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts text using XPath selector."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><div id="name">Acme Corp</div></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = {
+            "company_name": {"selectors": ['//div[@id="name"]']}
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records_processed"] == 1
+        assert result["records"][0]["company_name"] == "Acme Corp"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_xpath_attribute_extraction(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts attribute using XPath with extract config."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1>Test Co</h1><a id="site" href="https://test.com">Visit</a></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = {
+            "company_name": {"selectors": ["h1"]},
+            "website": {
+                "selectors": ['//a[@id="site"]'],
+                "extract": "href"
+            }
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records"][0]["website"] == "https://test.com"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_xpath_lxml_import_error(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Falls back gracefully when lxml not installed."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="name">Acme Corp</h1></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = {
+            "company_name": {
+                "selectors": [
+                    "//div[@class='name']",  # XPath - will fail without lxml
+                    "h1.name",               # CSS fallback
+                ]
+            }
+        }
+
+        # Mock lxml import to fail inside _extract_xpath
+        with patch.dict("sys.modules", {"lxml": None, "lxml.etree": None}):
+            result = await agent.run({
+                "url": "https://example.com/member/1",
+                "association": "PMA"
+            })
+
+        # Should fall through to CSS selector
+        assert result["records_processed"] == 1
+        assert result["records"][0]["company_name"] == "Acme Corp"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_xpath_malformed_returns_none(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Malformed XPath returns None and tries next selector."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="name">Acme Corp</h1></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = {
+            "company_name": {
+                "selectors": [
+                    "//[invalid xpath!(",  # Invalid XPath
+                    "h1.name",             # Valid CSS fallback
+                ]
+            }
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records_processed"] == 1
+        assert result["records"][0]["company_name"] == "Acme Corp"
+
+
+# =============================================================================
+# TEST SCHEMA EXTENDS
+# =============================================================================
+
+
+class TestHTMLParserSchemaExtends:
+    """Tests for schema 'extends' functionality."""
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_inherits_base_fields(
+        self, mock_limiter, mock_http, mock_logger, mock_config, tmp_path
+    ):
+        """Extended schema inherits fields from base."""
+        mock_config.return_value.load.return_value = {}
+
+        from agents.extraction.html_parser import HTMLParserAgent
+        import yaml
+
+        # Create schemas directory
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+
+        # Create base schema
+        base_schema = {
+            "default": {
+                "company_name": {"selectors": [".name"]},
+                "city": {"selectors": [".city"]},
+            }
+        }
+        with open(schemas_dir / "default.yaml", "w") as f:
+            yaml.dump(base_schema, f)
+
+        # Create extended schema
+        ext_schema = {
+            "pma": {
+                "extends": "default",
+                "phone": {"selectors": [".phone"]},
+            }
+        }
+        with open(schemas_dir / "pma.yaml", "w") as f:
+            yaml.dump(ext_schema, f)
+
+        agent = HTMLParserAgent(
+            agent_type="extraction.html_parser",
+            config_path=str(tmp_path)
+        )
+
+        schema = agent._load_schema("pma")
+
+        assert "company_name" in schema  # inherited
+        assert "city" in schema           # inherited
+        assert "phone" in schema          # added
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_overrides_base_fields(
+        self, mock_limiter, mock_http, mock_logger, mock_config, tmp_path
+    ):
+        """Extended schema overrides base fields."""
+        mock_config.return_value.load.return_value = {}
+
+        from agents.extraction.html_parser import HTMLParserAgent
+        import yaml
+
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+
+        base_schema = {
+            "default": {
+                "company_name": {"selectors": [".name"]},
+            }
+        }
+        with open(schemas_dir / "default.yaml", "w") as f:
+            yaml.dump(base_schema, f)
+
+        ext_schema = {
+            "pma": {
+                "extends": "default",
+                "company_name": {"selectors": [".company-name", "h1"]},
+            }
+        }
+        with open(schemas_dir / "pma.yaml", "w") as f:
+            yaml.dump(ext_schema, f)
+
+        agent = HTMLParserAgent(
+            agent_type="extraction.html_parser",
+            config_path=str(tmp_path)
+        )
+
+        schema = agent._load_schema("pma")
+        # Override should win
+        assert schema["company_name"]["selectors"] == [".company-name", "h1"]
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_schema_from_file(
+        self, mock_limiter, mock_http, mock_logger, mock_config, tmp_path
+    ):
+        """Loads schema from YAML file on disk."""
+        mock_config.return_value.load.return_value = {}
+
+        from agents.extraction.html_parser import HTMLParserAgent
+        import yaml
+
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+
+        schema_data = {
+            "custom": {
+                "company_name": {"selectors": [".co-name"]},
+                "website": {"selectors": ["a.site"], "extract": "href"},
+            }
+        }
+        with open(schemas_dir / "custom.yaml", "w") as f:
+            yaml.dump(schema_data, f)
+
+        agent = HTMLParserAgent(
+            agent_type="extraction.html_parser",
+            config_path=str(tmp_path)
+        )
+
+        schema = agent._load_schema("custom")
+        assert schema["company_name"]["selectors"] == [".co-name"]
+        assert schema["website"]["extract"] == "href"
+
+
+# =============================================================================
+# TEST FIELD MAPPING AND ENUM
+# =============================================================================
+
+
+class TestHTMLParserFieldMapping:
+    """Tests for field mapping and enum validation."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_mapping_translates_value(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        schema_with_mapping
+    ):
+        """Mapping config translates extracted values."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="company-name">Acme Corp</h1><span class="tier">P</span></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = schema_with_mapping
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records"][0]["membership_tier"] == "Platinum"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_mapping_passthrough_unknown(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        schema_with_mapping
+    ):
+        """Mapping passes through unknown values unchanged."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="company-name">Acme Corp</h1><span class="tier">X</span></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = schema_with_mapping
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        # "X" not in mapping, passed through
+        assert result["records"][0]["membership_tier"] == "X"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_enum_exact_match(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        schema_with_enum
+    ):
+        """Enum validation passes exact match."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="company-name">Acme Corp</h1><span class="state">MI</span></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = schema_with_enum
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records"][0]["state"] == "MI"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_enum_case_insensitive_match(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        schema_with_enum
+    ):
+        """Enum validation does case-insensitive matching."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="company-name">Acme Corp</h1><span class="state">mi</span></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = schema_with_enum
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        # "mi" should be corrected to "MI"
+        assert result["records"][0]["state"] == "MI"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_enum_no_match_keeps_value(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        schema_with_enum
+    ):
+        """Enum validation keeps value when no match found."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1 class="company-name">Acme Corp</h1><span class="state">CA</span></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = schema_with_enum
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        # "CA" not in enum list, kept as-is
+        assert result["records"][0]["state"] == "CA"
+
+
+# =============================================================================
+# TEST CSS EXTRACT TYPES
+# =============================================================================
+
+
+class TestHTMLParserCSSExtractTypes:
+    """Tests for _extract_css with various extract types."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_extract_src(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts src attribute from element."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1>Acme Corp</h1><img class="logo" src="https://acme.com/logo.png"></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = {
+            "company_name": {"selectors": ["h1"]},
+            "logo_url": {"selectors": ["img.logo"], "extract": "src"}
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records"][0]["logo_url"] == "https://acme.com/logo.png"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_extract_custom_attribute(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts custom data attribute from element."""
+        mock_config.return_value.load.return_value = {}
+
+        html = '<html><body><h1>Acme Corp</h1><div class="member" data-id="M-12345">Info</div></body></html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import HTMLParserAgent
+
+        agent = HTMLParserAgent(agent_type="extraction.html_parser")
+        agent._schema_cache["default"] = {
+            "company_name": {"selectors": ["h1"]},
+            "member_id": {"selectors": [".member"], "extract": "data-id"}
+        }
+
+        result = await agent.run({
+            "url": "https://example.com/member/1",
+            "association": "PMA"
+        })
+
+        assert result["records"][0]["member_id"] == "M-12345"
+
+
+# =============================================================================
+# TEST AUTO-EXTRACT MEMBERS
+# =============================================================================
+
+
+class TestDirectoryParserAutoExtract:
+    """Tests for DirectoryParserAgent._auto_extract_members()."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_extracts_external_links(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        inline_directory_html
+    ):
+        """Auto-extract finds external company links."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = inline_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {}  # Empty schema triggers auto-extract
+
+        result = await agent.run({
+            "url": "https://pma.org/members",
+            "association": "PMA"
+        })
+
+        company_names = [r["company_name"] for r in result["records"]]
+        assert "Acme Manufacturing Inc" in company_names
+        assert "Gamma Systems Corp" in company_names
+        assert "Delta Corp" in company_names
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_skips_social_media_links(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        inline_directory_html
+    ):
+        """Auto-extract skips social media links."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = inline_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {}
+
+        result = await agent.run({
+            "url": "https://pma.org/members",
+            "association": "PMA"
+        })
+
+        domains = [r.get("domain", "") for r in result["records"]]
+        assert "www.facebook.com" not in domains
+        assert "twitter.com" not in domains
+        assert "www.linkedin.com" not in domains
+        assert "www.youtube.com" not in domains
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_skips_internal_links(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        inline_directory_html
+    ):
+        """Auto-extract skips links back to the association site."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = inline_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {}
+
+        result = await agent.run({
+            "url": "https://pma.org/members",
+            "association": "PMA"
+        })
+
+        # pma.org links should be excluded
+        domains = [r.get("domain", "") for r in result["records"]]
+        assert "pma.org" not in domains
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_dedupes_by_domain(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        inline_directory_html
+    ):
+        """Auto-extract deduplicates by domain."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = inline_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {}
+
+        result = await agent.run({
+            "url": "https://pma.org/members",
+            "association": "PMA"
+        })
+
+        # acme-mfg.com appears twice in the HTML, should only be extracted once
+        acme_records = [r for r in result["records"] if "acme" in r.get("domain", "").lower()]
+        assert len(acme_records) == 1
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_strips_asterisks(
+        self, mock_limiter, mock_http, mock_logger, mock_config,
+        inline_directory_html
+    ):
+        """Auto-extract strips trailing asterisks from company names."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = inline_directory_html
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.extraction.html_parser import DirectoryParserAgent
+
+        agent = DirectoryParserAgent(agent_type="extraction.directory_parser")
+        agent._schema_cache["default"] = {}
+
+        result = await agent.run({
+            "url": "https://pma.org/members",
+            "association": "PMA"
+        })
+
+        # "Beta Industries*" should become "Beta Industries"
+        beta = [r for r in result["records"] if "Beta" in r.get("company_name", "")]
+        assert len(beta) == 1
+        assert beta[0]["company_name"] == "Beta Industries"

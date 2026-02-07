@@ -778,3 +778,513 @@ class TestSchemaCoverage:
         assert "properties" in company_schema
         assert "required" in company_schema
         assert "company_name" in company_schema["required"]
+
+
+# =============================================================================
+# TEST: CLI main() Function
+# =============================================================================
+
+
+class TestContractValidatorCLI:
+    """Tests for the validator.py CLI main() function."""
+
+    # -------------------------------------------------------------------------
+    # Argument Parsing Tests
+    # -------------------------------------------------------------------------
+
+    def test_main_missing_schema_argument(self, tmp_path, capsys):
+        """Test that missing --schema argument exits with error."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "data.json"
+        test_file.write_text('{"company_name": "Test"}')
+
+        with patch.object(sys, 'argv', ['validator.py', '--file', str(test_file)]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # argparse exits with 2 for required argument missing
+        assert exc_info.value.code == 2
+
+    def test_main_missing_file_argument(self, capsys):
+        """Test that missing --file argument exits with error."""
+        import sys
+        from unittest.mock import patch
+
+        with patch.object(sys, 'argv', ['validator.py', '--schema', 'core/company']):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 2
+
+    def test_main_strict_flag_parsed(self, tmp_path, capsys):
+        """Test that --strict flag is recognized."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "valid.json"
+        test_file.write_text('{"company_name": "Acme Corp"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file),
+            '--strict'
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # Valid data should exit 0 even with strict
+        assert exc_info.value.code == 0
+
+    # -------------------------------------------------------------------------
+    # File I/O Error Tests
+    # -------------------------------------------------------------------------
+
+    def test_main_file_not_found_exits_1(self, capsys):
+        """Test that FileNotFoundError causes exit(1)."""
+        import sys
+        from unittest.mock import patch
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', '/nonexistent/path/file.json'
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error loading file" in captured.out
+
+    def test_main_invalid_json_exits_1(self, tmp_path, capsys):
+        """Test that invalid JSON causes exit(1)."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "invalid.json"
+        test_file.write_text('{not valid json}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error loading file" in captured.out
+
+    def test_main_file_error_message_printed(self, tmp_path, capsys):
+        """Test that file error message is printed to stdout."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "bad.json"
+        test_file.write_text('{"incomplete":')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit):
+                from contracts.validator import main
+                main()
+
+        captured = capsys.readouterr()
+        assert "Error" in captured.out
+
+    # -------------------------------------------------------------------------
+    # Validation Success Tests
+    # -------------------------------------------------------------------------
+
+    def test_main_valid_data_exits_0(self, tmp_path, capsys):
+        """Test that valid data causes exit(0)."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "company.json"
+        test_file.write_text('{"company_name": "Acme Corp"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 0
+
+    def test_main_success_message_printed(self, tmp_path, capsys):
+        """Test that 'PASSED' is printed on success."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "company.json"
+        test_file.write_text('{"company_name": "Test Company"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit):
+                from contracts.validator import main
+                main()
+
+        captured = capsys.readouterr()
+        assert "PASSED" in captured.out
+
+    def test_main_valid_strict_exits_0(self, tmp_path, capsys):
+        """Test that valid data in strict mode also exits 0."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "valid_strict.json"
+        test_file.write_text('{"company_name": "Test Corp"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file),
+            '--strict'
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "PASSED" in captured.out
+
+    # -------------------------------------------------------------------------
+    # Validation Failure - Non-Strict Mode Tests
+    # -------------------------------------------------------------------------
+
+    def test_main_invalid_data_nonstrict_exits_0(self, tmp_path, capsys):
+        """Test that invalid data in non-strict mode exits 0."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "invalid_company.json"
+        # Missing required company_name
+        test_file.write_text('{"domain": "test.com"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # Non-strict mode exits 0 even on validation failure
+        assert exc_info.value.code == 0
+
+    def test_main_failure_message_printed(self, tmp_path, capsys):
+        """Test that 'FAILED' is printed on validation failure."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "bad_company.json"
+        test_file.write_text('{"domain": "test.com"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit):
+                from contracts.validator import main
+                main()
+
+        captured = capsys.readouterr()
+        assert "FAILED" in captured.out
+
+    def test_main_errors_listed(self, tmp_path, capsys):
+        """Test that individual errors are printed."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "errors_company.json"
+        test_file.write_text('{"domain": "test.com"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit):
+                from contracts.validator import main
+                main()
+
+        captured = capsys.readouterr()
+        assert "Errors:" in captured.out
+        # company_name is required
+        assert "company_name" in captured.out.lower() or "required" in captured.out.lower()
+
+    def test_main_nonstrict_is_default(self, tmp_path, capsys):
+        """Test that non-strict mode is the default behavior."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "default_company.json"
+        test_file.write_text('{}')  # Empty object, missing company_name
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # Default (non-strict) should exit 0
+        assert exc_info.value.code == 0
+
+    # -------------------------------------------------------------------------
+    # Validation Failure - Strict Mode Tests
+    # -------------------------------------------------------------------------
+
+    def test_main_invalid_data_strict_exits_1(self, tmp_path, capsys):
+        """Test that invalid data in strict mode exits 1."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "strict_invalid.json"
+        test_file.write_text('{"domain": "test.com"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file),
+            '--strict'
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 1
+
+    def test_main_strict_error_output(self, tmp_path, capsys):
+        """Test that error details are shown in strict mode."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "strict_error.json"
+        test_file.write_text('{"invalid_field": "value"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file),
+            '--strict'
+        ]):
+            with pytest.raises(SystemExit):
+                from contracts.validator import main
+                main()
+
+        captured = capsys.readouterr()
+        # Should show error info
+        assert "ERROR" in captured.out or "error" in captured.out.lower()
+
+    def test_main_contract_validation_error_caught(self, tmp_path, capsys):
+        """Test that ContractValidationError is handled properly in strict mode."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "contract_error.json"
+        test_file.write_text('{"company_name": "Test", "quality_score": 150}')  # > max 100
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file),
+            '--strict'
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 1
+
+    # -------------------------------------------------------------------------
+    # Edge Case Tests
+    # -------------------------------------------------------------------------
+
+    def test_main_schema_not_found(self, tmp_path, capsys):
+        """Test that missing schema causes exit(1)."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "any.json"
+        test_file.write_text('{"data": "value"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'nonexistent/schema',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 1
+
+    def test_main_empty_json_object(self, tmp_path, capsys):
+        """Test that empty JSON object is processed."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "empty.json"
+        test_file.write_text('{}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # Empty object missing company_name, but non-strict exits 0
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "FAILED" in captured.out
+
+    def test_main_empty_json_array(self, tmp_path, capsys):
+        """Test that empty JSON array is processed."""
+        import sys
+        from unittest.mock import patch
+
+        test_file = tmp_path / "empty_array.json"
+        test_file.write_text('[]')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # Array where object expected, non-strict exits 0
+        assert exc_info.value.code == 0
+
+    def test_main_unexpected_exception_exits_1(self, tmp_path, capsys):
+        """Test that unexpected exceptions cause exit(1)."""
+        import sys
+        from unittest.mock import patch, MagicMock
+
+        test_file = tmp_path / "exception.json"
+        test_file.write_text('{"company_name": "Test"}')
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            # Patch ContractValidator to raise unexpected exception
+            with patch('contracts.validator.ContractValidator') as mock_validator:
+                mock_validator.return_value.validate.side_effect = RuntimeError("Unexpected!")
+                with pytest.raises(SystemExit) as exc_info:
+                    from contracts.validator import main
+                    main()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Unexpected" in captured.out
+
+    def test_main_help_flag(self, capsys):
+        """Test that --help works."""
+        import sys
+        from unittest.mock import patch
+
+        with patch.object(sys, 'argv', ['validator.py', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # argparse exits with 0 for --help
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Validate data against contract schemas" in captured.out
+
+    def test_main_with_complex_valid_data(self, tmp_path, capsys):
+        """Test validation with more complex valid company data."""
+        import sys
+        import json
+        from unittest.mock import patch
+
+        company_data = {
+            "company_name": "Acme Manufacturing Inc",
+            "domain": "acme.com",
+            "website": "https://www.acme.com",
+            "city": "Chicago",
+            "state": "IL",
+            "country": "United States",
+            "employee_count_min": 100,
+            "employee_count_max": 500,
+            "tech_stack": ["SAP", "Salesforce"],
+            "quality_score": 85
+        }
+
+        test_file = tmp_path / "complex_company.json"
+        test_file.write_text(json.dumps(company_data))
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "PASSED" in captured.out
+
+    def test_main_with_type_violation(self, tmp_path, capsys):
+        """Test validation catches type violations."""
+        import sys
+        import json
+        from unittest.mock import patch
+
+        company_data = {
+            "company_name": "Test Corp",
+            "employee_count_min": "not a number"  # Should be integer
+        }
+
+        test_file = tmp_path / "type_error.json"
+        test_file.write_text(json.dumps(company_data))
+
+        with patch.object(sys, 'argv', [
+            'validator.py',
+            '--schema', 'core/company',
+            '--file', str(test_file)
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                from contracts.validator import main
+                main()
+
+        # Non-strict exits 0
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "FAILED" in captured.out

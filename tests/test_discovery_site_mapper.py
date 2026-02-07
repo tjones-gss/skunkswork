@@ -789,15 +789,10 @@ class TestSiteMapperAgentLooksLikeDirectory:
         </html>
         """
 
-        # Note: Bug in implementation - soup.find() returns Tag not bool
-        # Test the method completes without error
-        try:
-            result = agent._looks_like_directory(html)
-            # If it works, result should be bool
-            assert isinstance(result, bool)
-        except TypeError:
-            # Known bug - sum() fails with Tag objects
-            pytest.skip("Known bug in _looks_like_directory: soup.find returns Tag not bool")
+        result = agent._looks_like_directory(html)
+        assert isinstance(result, bool)
+        # Has "member directory" text but only 2 links, so not enough indicators
+        assert result is False
 
     @pytest.mark.asyncio
     @patch("agents.base.Config")
@@ -813,15 +808,14 @@ class TestSiteMapperAgentLooksLikeDirectory:
         from agents.discovery.site_mapper import SiteMapperAgent
         agent = SiteMapperAgent(agent_type="discovery.site_mapper")
 
-        # Page with many links
+        # Page with many links (30 > 20 threshold)
         links = "".join([f'<a href="/member/{i}">Company {i}</a>' for i in range(30)])
         html = f"<html><body>{links}</body></html>"
 
-        try:
-            result = agent._looks_like_directory(html)
-            assert isinstance(result, bool)
-        except TypeError:
-            pytest.skip("Known bug in _looks_like_directory: soup.find returns Tag not bool")
+        result = agent._looks_like_directory(html)
+        assert isinstance(result, bool)
+        # Has many links indicator (1 indicator), but not enough for threshold of 2
+        assert result is False
 
     @pytest.mark.asyncio
     @patch("agents.base.Config")
@@ -848,11 +842,10 @@ class TestSiteMapperAgentLooksLikeDirectory:
         </html>
         """
 
-        try:
-            result = agent._looks_like_directory(html)
-            assert isinstance(result, bool)
-        except TypeError:
-            pytest.skip("Known bug in _looks_like_directory: soup.find returns Tag not bool")
+        result = agent._looks_like_directory(html)
+        assert isinstance(result, bool)
+        # Has member class indicator (1), but only 2 list items (< 10 threshold)
+        assert result is False
 
     @pytest.mark.asyncio
     @patch("agents.base.Config")
@@ -870,11 +863,10 @@ class TestSiteMapperAgentLooksLikeDirectory:
 
         html = "<html><body><h1>About Us</h1><p>We are a company.</p></body></html>"
 
-        try:
-            result = agent._looks_like_directory(html)
-            assert isinstance(result, bool)
-        except TypeError:
-            pytest.skip("Known bug in _looks_like_directory: soup.find returns Tag not bool")
+        result = agent._looks_like_directory(html)
+        assert isinstance(result, bool)
+        # Simple page with no directory indicators
+        assert result is False
 
     @pytest.mark.asyncio
     @patch("agents.base.Config")
@@ -893,11 +885,10 @@ class TestSiteMapperAgentLooksLikeDirectory:
         items = "".join([f'<li class="company">Company {i}</li>' for i in range(15)])
         html = f"<html><body><p>Member directory</p><ul>{items}</ul></body></html>"
 
-        try:
-            result = agent._looks_like_directory(html)
-            assert isinstance(result, bool)
-        except TypeError:
-            pytest.skip("Known bug in _looks_like_directory: soup.find returns Tag not bool")
+        result = agent._looks_like_directory(html)
+        assert isinstance(result, bool)
+        # Has "member directory" text (1) and many list items with class (1) = 2 indicators
+        assert result is True
 
 
 # =============================================================================

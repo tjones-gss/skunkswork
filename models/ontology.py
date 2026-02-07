@@ -222,7 +222,7 @@ class Company(BaseModel):
 
     def merge_from(self, other: "Company", overwrite: bool = False):
         """Merge data from another company record."""
-        for field_name, field_info in self.model_fields.items():
+        for field_name, _field_info in self.model_fields.items():
             if field_name in ('id', 'created_at', 'provenance'):
                 continue
 

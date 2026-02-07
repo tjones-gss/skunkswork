@@ -450,7 +450,7 @@ class TestContactFinderAgentApollo:
     async def test_apollo_exception_returns_empty(
         self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
     ):
-        """Apollo exception returns empty list."""
+        """Apollo exception returns empty list and logs warning."""
         mock_config.return_value.load.return_value = {}
 
         mock_http.return_value.post = AsyncMock(
@@ -464,6 +464,9 @@ class TestContactFinderAgentApollo:
         contacts = await agent._search_apollo("acme.com")
 
         assert contacts == []
+        agent.log.warning.assert_called()
+        call_args = agent.log.warning.call_args
+        assert call_args[0][0] == "apollo_contact_search_failed"
 
 
 # =============================================================================

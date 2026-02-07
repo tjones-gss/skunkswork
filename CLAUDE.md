@@ -148,3 +148,28 @@ High priority: PMA, NEMA, SOCMA, AGMA, AIA
 Medium priority: NTMA, PMPA, FIA, NADCA, AFS
 
 Configure in `config/associations.yaml`.
+
+## Session Handoff Protocol
+
+**Every session MUST complete these handoff steps before ending:**
+
+### 1. Update `memory/MEMORY.md`
+- Update "Current Status" section (test count, coverage, extracted companies)
+- Add completed milestones to "Completed Milestones" list
+- Update "Known Gaps" if any were resolved or new ones discovered
+- Update "Potential Next Steps" based on what was accomplished
+
+### 2. Update `docs/HANDOFF.md`
+- Add a new session entry at the top (after the `---` following the header)
+- Include: Session Summary, Completed This Session, Files Modified, Key Decisions, Next Session Priorities
+- Follow the template at the bottom of HANDOFF.md
+
+### 3. Update `memory/lessons.md`
+- When a bug is fixed, add a lesson with: symptom, root cause, fix, and takeaway
+- When a challenging problem is solved, document the approach that worked
+- When a wrong approach is tried first, document why it failed
+
+### When to update
+- After completing any implementation task (code changes + tests passing)
+- Before ending a session (final handoff)
+- After discovering a significant bug or architectural insight

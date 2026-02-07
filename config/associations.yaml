@@ -30,10 +30,14 @@ associations:
     
   NEMA:
     name: "National Electrical Manufacturers Association"
-    url: "https://makeitelectric.org"
-    directory_url: "https://makeitelectric.org/membership/membership-directory"
+    url: "https://www.makeitelectric.org"
+    directory_url: "https://www.makeitelectric.org/membership/membership-directory/"
+    district_urls:
+      - "https://www.makeitelectric.org/membership/membership-directory/"
     expected_members: 300
     priority: "high"
+    schema: "nema"
+    extraction_mode: "district_directories"
     erp_competition: "none"
     
   SOCMA:

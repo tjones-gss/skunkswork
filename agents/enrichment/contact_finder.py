@@ -186,8 +186,14 @@ class ContactFinderAgent(BaseAgent):
                     })
                 return contacts
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "apollo_contact_search_failed",
+                provider="apollo",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return []
 
@@ -220,8 +226,14 @@ class ContactFinderAgent(BaseAgent):
                     })
                 return contacts
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "zoominfo_contact_search_failed",
+                provider="zoominfo",
+                company_name=company_name,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return []
 
@@ -243,7 +255,15 @@ class ContactFinderAgent(BaseAgent):
                     if contacts:
                         return contacts
 
-            except Exception:
+            except Exception as e:
+                self.log.debug(
+                    "team_page_scrape_failed",
+                    provider="website",
+                    domain=domain,
+                    path=path,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
                 continue
 
         return []

@@ -7,6 +7,8 @@ Central coordinator for all pipeline operations using state machine.
 
 import asyncio
 import json
+import os
+import shutil
 import uuid
 from datetime import datetime, UTC
 from pathlib import Path
@@ -199,6 +201,26 @@ class OrchestratorAgent(BaseAgent):
         """Initialize pipeline - load configurations and seed URLs."""
         self.log.info("Phase: INIT - Loading configurations")
 
+        # Build and log health summary
+        health = self._build_health_summary()
+        self.log.info("health_summary", **health)
+
+        # Write health check file
+        if not self.dry_run:
+            health_dir = Path(f"data/.state/{self.job_id}")
+            health_dir.mkdir(parents=True, exist_ok=True)
+            health_path = health_dir / "health_check.json"
+            try:
+                with open(health_path, "w") as f:
+                    json.dump(health, f, indent=2, default=str)
+            except OSError as e:
+                self.log.warning(f"Failed to write health check: {e}")
+
+        # Check critical resources
+        if health.get("disk_free_gb", 999) < 1.0:
+            self.log.error("Insufficient disk space", disk_free_gb=health["disk_free_gb"])
+            return False
+
         for assoc_code in self.state.association_codes:
             config = self.associations_config.get("associations", {}).get(assoc_code)
             if config:
@@ -213,6 +235,36 @@ class OrchestratorAgent(BaseAgent):
 
         self.state_manager.checkpoint(self.state)
         return True
+
+    def _build_health_summary(self) -> dict:
+        """Build startup health summary.
+
+        Returns dict with: timestamp, job_id, associations, api_keys status,
+        and disk_free_gb.
+        """
+        # Check API keys (masked booleans)
+        missing_keys = self._check_api_keys()
+        all_env_keys = set()
+        for keys in self.API_KEY_REQUIREMENTS.values():
+            all_env_keys.update(keys)
+        api_keys = {k: k not in missing_keys and bool(os.environ.get(k)) for k in sorted(all_env_keys)}
+
+        # Check disk space
+        try:
+            disk_usage = shutil.disk_usage(".")
+            disk_free_gb = round(disk_usage.free / (1024 ** 3), 2)
+        except OSError:
+            disk_free_gb = -1
+
+        return {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "job_id": self.job_id,
+            "associations": self.state.association_codes if self.state else [],
+            "api_keys": api_keys,
+            "disk_free_gb": disk_free_gb,
+            "mode": self.mode,
+            "dry_run": self.dry_run,
+        }
 
     async def _phase_gatekeeper(self) -> bool:
         """Check access permissions for all queued URLs."""

@@ -80,7 +80,7 @@ class TestJsonFormatter:
         levels = [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL]
         level_names = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
-        for level, name in zip(levels, level_names):
+        for level, name in zip(levels, level_names, strict=True):
             record = logging.LogRecord(
                 name="test", level=level, pathname="", lineno=0,
                 msg="Test", args=(), exc_info=None,

@@ -428,7 +428,7 @@ class TestFirmographicAgentClearbit:
     async def test_clearbit_exception_returns_none(
         self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
     ):
-        """Clearbit exception returns None."""
+        """Clearbit exception returns None and logs warning."""
         mock_config.return_value.load.return_value = {}
 
         mock_http.return_value.get = AsyncMock(
@@ -442,6 +442,9 @@ class TestFirmographicAgentClearbit:
         result = await agent._fetch_clearbit("acme.com")
 
         assert result is None
+        agent.log.warning.assert_called()
+        call_args = agent.log.warning.call_args
+        assert call_args[0][0] == "clearbit_fetch_failed"
 
 
 # =============================================================================
@@ -656,11 +659,14 @@ class TestFirmographicAgentZoomInfo:
 
         agent = FirmographicAgent(agent_type="enrichment.firmographic")
 
-        # Empty data raises IndexError which is caught, returning None
+        # Empty data raises IndexError which is caught and logged
         result = await agent._fetch_zoominfo("Unknown Company")
 
-        # Agent catches exception and returns None for empty results
+        # Agent catches exception, logs warning, and returns None
         assert result is None
+        agent.log.warning.assert_called()
+        call_args = agent.log.warning.call_args
+        assert call_args[0][0] == "zoominfo_fetch_failed"
 
     @pytest.mark.asyncio
     @patch("agents.base.Config")

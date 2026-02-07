@@ -159,7 +159,7 @@ class PDFParserAgent(BaseAgent):
                 "extracted_at": datetime.now(UTC).isoformat()
             }
 
-            for header, value in zip(headers, row):
+            for header, value in zip(headers, row, strict=False):
                 if header and value:
                     clean_value = str(value).strip()
                     if clean_value:

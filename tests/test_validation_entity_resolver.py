@@ -829,3 +829,104 @@ class TestEntityResolverEdgeCases:
         result = await entity_resolver.run(task)
 
         assert result["canonical_entities"][0]["custom_field"] == "custom_value"
+
+
+# =============================================================================
+# TEST INDEXING REGRESSION (Bug 3 fix)
+# =============================================================================
+
+
+class TestEntityResolverIndexingRegression:
+    """Regression tests for _find_merge_groups indexing fix.
+
+    The original code had broken triple-indexing that computed
+    existing_count by scanning index dicts (missing entities not in
+    any index) and used pass for new_ records. The fix passes
+    existing_count explicitly from the caller.
+
+    Uses match_threshold=0.3 to ensure domain-only matches merge,
+    isolating the indexing logic from the scoring threshold.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mixed_existing_and_new_with_duplicate(self):
+        """Mixed existing + new records with cross-source duplicate merge correctly."""
+        agent = create_entity_resolver_agent({
+            "validation": {"entity_resolver": {"match_threshold": 0.3}}
+        })
+
+        existing = [
+            {"company_name": "Alpha Corp", "website": "https://alpha.com"},
+            {"company_name": "Beta LLC", "website": "https://beta.com"},
+            {"company_name": "Gamma Inc", "website": "https://gamma.com"},
+        ]
+        new_records = [
+            {"company_name": "Delta Mfg", "website": "https://delta.com"},
+            # Duplicate of existing[1] by domain
+            {"company_name": "Beta Industries", "website": "https://beta.com"},
+            {"company_name": "Epsilon Co", "website": "https://epsilon.com"},
+        ]
+
+        task = {
+            "records": new_records,
+            "existing_entities": existing,
+        }
+        result = await agent.run(task)
+
+        assert result["success"] is True
+        # 3 existing + 3 new - 1 merged = 5 canonical
+        assert len(result["canonical_entities"]) == 5
+        # At least one merge group with 2 members (Beta)
+        multi_groups = [g for g in result["merge_groups"] if len(g) > 1]
+        assert len(multi_groups) >= 1
+
+    @pytest.mark.asyncio
+    async def test_new_records_only_existing_count_zero(self):
+        """New records only (no existing entities) works with existing_count=0."""
+        agent = create_entity_resolver_agent({
+            "validation": {"entity_resolver": {"match_threshold": 0.3}}
+        })
+
+        new_records = [
+            {"company_name": "Alpha Corp", "website": "https://alpha.com"},
+            {"company_name": "Beta LLC", "website": "https://beta.com"},
+            # Duplicate of first by domain
+            {"company_name": "Alpha Industries", "website": "https://alpha.com"},
+        ]
+
+        task = {
+            "records": new_records,
+            "existing_entities": [],
+        }
+        result = await agent.run(task)
+
+        assert result["success"] is True
+        # 3 records - 1 merged = 2 canonical
+        assert len(result["canonical_entities"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_existing_entity_not_in_any_index(self):
+        """existing_count is correct even when an entity has no indexed fields."""
+        agent = create_entity_resolver_agent({
+            "validation": {"entity_resolver": {"match_threshold": 0.3}}
+        })
+
+        existing = [
+            # This entity has no website, short name, no phone — won't appear in any index
+            {"company_name": "AB", "city": "Detroit"},
+            {"company_name": "Beta LLC", "website": "https://beta.com"},
+        ]
+        new_records = [
+            # Duplicate of existing[1] by domain
+            {"company_name": "Beta Industries", "website": "https://beta.com"},
+        ]
+
+        task = {
+            "records": new_records,
+            "existing_entities": existing,
+        }
+        result = await agent.run(task)
+
+        assert result["success"] is True
+        # existing[0] stays alone, existing[1] merges with new[0]
+        assert len(result["canonical_entities"]) == 2

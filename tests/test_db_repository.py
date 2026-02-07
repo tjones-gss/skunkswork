@@ -386,7 +386,7 @@ class TestExtractionJobRepository:
 
     @pytest.mark.asyncio
     async def test_list_by_status(self, session):
-        for i in range(3):
+        for _i in range(3):
             await ExtractionJobRepository.create(session, {
                 "job_type": "extract",
                 "status": "running",

@@ -479,7 +479,7 @@ class EventExtractorAgent(BaseAgent):
         from skills.common.SKILL import STATE_CODES
 
         # Pattern: "City, ST" or "City, State"
-        for state_name, state_code in STATE_CODES.items():
+        for _, state_code in STATE_CODES.items():
             pattern = rf'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),?\s*{state_code}\b'
             match = re.search(pattern, text)
             if match:

@@ -959,3 +959,135 @@ class TestBaseAgentLoadSchema:
         schema = agent.load_schema("pma")
 
         mock_config.return_value.load.assert_called_with("schemas/pma")
+
+
+
+# =============================================================================
+# TEST API KEY HEALTH CHECK
+# =============================================================================
+
+
+class TestBaseAgentApiKeyHealthCheck:
+    """Tests for _check_api_keys() method."""
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_no_requirements_returns_empty(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Agent with no API key requirements returns empty list."""
+        mock_config.return_value.load.return_value = {}
+        AgentClass = create_concrete_agent()
+        agent = AgentClass(agent_type="test.agent")
+
+        missing = agent._check_api_keys()
+
+        assert missing == []
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_enrichment_tech_stack_missing_key(
+        self, mock_limiter, mock_http, mock_logger, mock_config, monkeypatch
+    ):
+        """Tech stack agent reports missing BUILTWITH_API_KEY."""
+        mock_config.return_value.load.return_value = {}
+        monkeypatch.delenv("BUILTWITH_API_KEY", raising=False)
+
+        AgentClass = create_concrete_agent()
+        agent = AgentClass(agent_type="enrichment.tech_stack")
+
+        missing = agent._check_api_keys()
+
+        assert "BUILTWITH_API_KEY" in missing
+        agent.log.warning.assert_called_once()
+        call_args = agent.log.warning.call_args
+        assert call_args[0][0] == "missing_api_keys"
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_enrichment_tech_stack_key_present(
+        self, mock_limiter, mock_http, mock_logger, mock_config, monkeypatch
+    ):
+        """Tech stack agent verifies key when present."""
+        mock_config.return_value.load.return_value = {}
+        monkeypatch.setenv("BUILTWITH_API_KEY", "test-key-123")
+
+        AgentClass = create_concrete_agent()
+        agent = AgentClass(agent_type="enrichment.tech_stack")
+
+        missing = agent._check_api_keys()
+
+        assert missing == []
+        agent.log.info.assert_called()
+        # Find the api_keys_verified call
+        info_calls = [c for c in agent.log.info.call_args_list if c[0][0] == "api_keys_verified"]
+        assert len(info_calls) == 1
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_firmographic_reports_multiple_missing(
+        self, mock_limiter, mock_http, mock_logger, mock_config, monkeypatch
+    ):
+        """Firmographic agent reports both missing keys."""
+        mock_config.return_value.load.return_value = {}
+        monkeypatch.delenv("CLEARBIT_API_KEY", raising=False)
+        monkeypatch.delenv("APOLLO_API_KEY", raising=False)
+
+        AgentClass = create_concrete_agent()
+        agent = AgentClass(agent_type="enrichment.firmographic")
+
+        missing = agent._check_api_keys()
+
+        assert "CLEARBIT_API_KEY" in missing
+        assert "APOLLO_API_KEY" in missing
+        assert len(missing) == 2
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_firmographic_partial_keys(
+        self, mock_limiter, mock_http, mock_logger, mock_config, monkeypatch
+    ):
+        """Firmographic agent with one key present, one missing."""
+        mock_config.return_value.load.return_value = {}
+        monkeypatch.setenv("CLEARBIT_API_KEY", "test-clearbit")
+        monkeypatch.delenv("APOLLO_API_KEY", raising=False)
+
+        AgentClass = create_concrete_agent()
+        agent = AgentClass(agent_type="enrichment.firmographic")
+
+        missing = agent._check_api_keys()
+
+        assert missing == ["APOLLO_API_KEY"]
+        agent.log.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_execute_calls_check_api_keys(
+        self, mock_limiter, mock_http, mock_logger, mock_config, monkeypatch
+    ):
+        """execute() calls _check_api_keys() before run()."""
+        mock_config.return_value.load.return_value = {}
+        mock_http.return_value.close = AsyncMock()
+        monkeypatch.delenv("BUILTWITH_API_KEY", raising=False)
+
+        AgentClass = create_concrete_agent()
+        agent = AgentClass(agent_type="enrichment.tech_stack")
+
+        await agent.execute({})
+
+        # Verify warning was logged for missing key
+        warning_calls = [c for c in agent.log.warning.call_args_list if c[0][0] == "missing_api_keys"]
+        assert len(warning_calls) == 1

@@ -89,13 +89,49 @@ class BaseAgent(ABC):
             self.log.warning(f"Could not load agent config: {e}")
             return {}
     
+    # API key requirements by agent type
+    API_KEY_REQUIREMENTS: dict[str, list[str]] = {
+        "enrichment.firmographic": ["CLEARBIT_API_KEY", "APOLLO_API_KEY"],
+        "enrichment.tech_stack": ["BUILTWITH_API_KEY"],
+        "enrichment.contact_finder": ["APOLLO_API_KEY", "HUNTER_API_KEY"],
+        "validation.crossref": ["GOOGLE_PLACES_API_KEY"],
+    }
+
     def _setup(self, **kwargs):
         """
         Hook for subclass initialization.
         Override in subclasses for custom setup.
         """
         pass
-    
+
+    def _check_api_keys(self) -> list[str]:
+        """
+        Check required API keys for this agent type.
+
+        Returns list of missing key names. Logs a warning if any are absent
+        but does not raise — agents degrade gracefully when keys are missing.
+        """
+        required_keys = self.API_KEY_REQUIREMENTS.get(self.agent_type, [])
+        if not required_keys:
+            return []
+
+        missing = [k for k in required_keys if not os.environ.get(k)]
+        if missing:
+            self.log.warning(
+                "missing_api_keys",
+                agent_type=self.agent_type,
+                missing_keys=missing,
+                message=f"Missing API keys: {', '.join(missing)}. "
+                        f"Agent will run with reduced functionality.",
+            )
+        else:
+            self.log.info(
+                "api_keys_verified",
+                agent_type=self.agent_type,
+                keys_checked=len(required_keys),
+            )
+        return missing
+
     @abstractmethod
     async def run(self, task: dict) -> dict:
         """
@@ -121,7 +157,10 @@ class BaseAgent(ABC):
         self.status = "running"
         
         self.log.info("Agent starting", task_keys=list(task.keys()))
-        
+
+        # Check API key health before running
+        self._check_api_keys()
+
         try:
             # Run pre-execution hook
             task = await self._pre_execute(task)

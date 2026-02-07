@@ -147,6 +147,60 @@ def is_crawler_agent(agent_type: str) -> bool:
 
 
 # =============================================================================
+# POLICY: ENRICHMENT HTTP ACCESS
+# =============================================================================
+
+# Agents allowed to make enrichment HTTP calls (API lookups, website fingerprinting)
+ENRICHMENT_AGENTS = {"firmographic", "tech_stack", "contact_finder"}
+
+
+def enrichment_http(func: Callable[..., T]) -> Callable[..., T]:
+    """
+    Allow HTTP access for enrichment agents with logging.
+
+    Enrichment agents need HTTP for API calls (BuiltWith, Clearbit, etc.)
+    and website fingerprinting. This decorator:
+    - Allows only recognized enrichment agents
+    - Logs all external HTTP calls for audit
+
+    Usage:
+        @enrichment_http
+        async def _call_api(self, url: str) -> dict:
+            ...
+    """
+    @functools.wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        agent_type = getattr(self, 'agent_type', 'unknown')
+
+        # Extract the short agent name (e.g., "enrichment.firmographic" -> "firmographic")
+        agent_short = agent_type.rsplit(".", 1)[-1] if "." in agent_type else agent_type
+
+        if agent_short not in ENRICHMENT_AGENTS:
+            raise PolicyViolation(
+                policy="enrichment_http_only",
+                message=f"Agent '{agent_type}' is not authorized for enrichment HTTP calls. "
+                        f"Only enrichment agents can make API calls: {ENRICHMENT_AGENTS}",
+                agent=agent_type
+            )
+
+        # Log the enrichment HTTP call
+        url_arg = args[0] if args else kwargs.get("url", "unknown")
+        logger.info(
+            f"Enrichment HTTP call by {agent_type}: {url_arg}"
+        )
+
+        return await func(self, *args, **kwargs)
+
+    return wrapper
+
+
+def is_enrichment_agent(agent_type: str) -> bool:
+    """Check if an agent type is allowed to make enrichment HTTP calls."""
+    agent_short = agent_type.rsplit(".", 1)[-1] if "." in agent_type else agent_type
+    return agent_short in ENRICHMENT_AGENTS
+
+
+# =============================================================================
 # POLICY: VALIDATE JSON OUTPUT
 # =============================================================================
 
@@ -181,7 +235,7 @@ def validate_json_output(func: Callable[..., T]) -> Callable[..., T]:
                 message=f"Output is not JSON-serializable: {e}",
                 agent=agent_type,
                 context={"error": str(e)}
-            )
+            ) from e
 
         return result
 
@@ -408,3 +462,8 @@ class PolicyChecker:
     def check_crawler_permission(agent_type: str) -> bool:
         """Check if agent can fetch pages."""
         return agent_type in CRAWLER_AGENTS
+
+    @staticmethod
+    def check_enrichment_permission(agent_type: str) -> bool:
+        """Check if agent can make enrichment HTTP calls."""
+        return is_enrichment_agent(agent_type)

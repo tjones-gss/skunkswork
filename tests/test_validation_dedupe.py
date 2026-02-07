@@ -191,11 +191,28 @@ class TestDedupeAgentFuzzyMatch:
         assert score < 0.5
 
     def test_basic_similarity_fallback(self, dedupe_agent):
-        """Basic similarity is used when rapidfuzz unavailable."""
+        """Basic similarity uses edit distance, not character-set Jaccard."""
         # Test the basic similarity method directly
         score = dedupe_agent._basic_similarity("abc", "abd")
-        # Character overlap: {a,b,c} & {a,b,d} = {a,b} -> 2/4 = 0.5
-        assert score == 0.5
+        # Edit distance: "abc" vs "abd" — 2 of 3 chars match positionally
+        # rapidfuzz.fuzz.ratio gives ~66.7%
+        assert 0.6 <= score <= 0.7
+
+    def test_basic_similarity_anagram_not_perfect(self, dedupe_agent):
+        """Anagrams must NOT score 1.0 (the old Jaccard bug)."""
+        score = dedupe_agent._basic_similarity("abc", "cab")
+        assert score < 1.0
+
+    def test_basic_similarity_company_name_anagrams(self, dedupe_agent):
+        """Company name anagrams must score low."""
+        score = dedupe_agent._basic_similarity("CAB Industries", "ABC Manufacturing")
+        assert score < 0.7
+
+    def test_basic_similarity_respects_character_order(self, dedupe_agent):
+        """More positionally-aligned strings score higher than scrambled."""
+        aligned = dedupe_agent._basic_similarity("acme", "acne")
+        scrambled = dedupe_agent._basic_similarity("acme", "meca")
+        assert aligned > scrambled
 
 
 # =============================================================================

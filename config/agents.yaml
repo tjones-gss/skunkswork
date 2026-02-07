@@ -128,6 +128,7 @@ enrichment:
       - job_postings
     batch_size: 50
     skip_if_exists: true
+    enable_indeed_scraping: false  # Gate Indeed.com scraping; set true only with explicit approval
 
   contact_finder:
     timeout: 300

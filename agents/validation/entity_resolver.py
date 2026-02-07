@@ -116,7 +116,8 @@ class EntityResolverAgent(BaseAgent):
         # Find matching groups
         all_records = existing_entities + records
         merge_groups = self._find_merge_groups(
-            all_records, domain_index, name_index, phone_index
+            all_records, domain_index, name_index, phone_index,
+            existing_count=len(existing_entities),
         )
 
         # Create canonical entities
@@ -201,35 +202,19 @@ class EntityResolverAgent(BaseAgent):
         records: list[dict],
         domain_index: dict,
         name_index: dict,
-        phone_index: dict
+        phone_index: dict,
+        existing_count: int = 0,
     ) -> list[list[int]]:
         """Find groups of records that should be merged."""
-        # Build record index mapping
-        record_ids = {}
-        for i, record in enumerate(records):
-            record_ids[f"existing_{i}" if i < len(record_ids) else f"new_{i - len(record_ids)}"] = i
-
-        # Correct the indexing
-        record_ids = {}
-        for key, indices in domain_index.items():
-            for idx in indices:
-                if idx.startswith("existing_"):
-                    record_ids[idx] = int(idx.split("_")[1])
-                else:
-                    # Assume records after existing come from 'new_'
-                    pass
-
-        # Re-index properly
         record_map = {}
-        existing_count = 0
-        for key, indices in list(domain_index.items()) + list(name_index.items()) + list(phone_index.items()):
-            for idx in indices:
-                parts = idx.split("_")
-                if parts[0] == "existing":
-                    record_map[idx] = int(parts[1])
-                    existing_count = max(existing_count, int(parts[1]) + 1)
-                else:
-                    record_map[idx] = existing_count + int(parts[1])
+        for index_dict in (domain_index, name_index, phone_index):
+            for _key, id_list in index_dict.items():
+                for str_id in id_list:
+                    if str_id in record_map:
+                        continue
+                    prefix, num_str = str_id.split("_", 1)
+                    num = int(num_str)
+                    record_map[str_id] = num if prefix == "existing" else existing_count + num
 
         groups = []
         processed = set()

@@ -206,14 +206,17 @@ class DedupeAgent(BaseAgent):
         return self._basic_similarity(s1, s2)
 
     def _basic_similarity(self, s1: str, s2: str) -> float:
-        """Basic string similarity using character overlap."""
-        s1_set = set(s1.lower())
-        s2_set = set(s2.lower())
-
-        intersection = len(s1_set & s2_set)
-        union = len(s1_set | s2_set)
-
-        return intersection / union if union > 0 else 0.0
+        """Basic string similarity using edit distance."""
+        if not s1 or not s2:
+            return 0.0
+        try:
+            from rapidfuzz import fuzz
+            return fuzz.ratio(s1.lower(), s2.lower()) / 100.0
+        except ImportError:
+            # Pure-Python fallback: positional character matching
+            s1, s2 = s1.lower(), s2.lower()
+            matches = sum(c1 == c2 for c1, c2 in zip(s1, s2, strict=False))
+            return matches / max(len(s1), len(s2))
 
     def _merge_records(self, records: list[dict]) -> dict:
         """Merge multiple records into one, keeping best data."""

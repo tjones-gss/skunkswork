@@ -4,7 +4,108 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-07 (Session 8) — CI/CD Infrastructure Upgrade
+## Latest Session: 2026-02-07 (Session 10) — WBS Phase 1-2 Completion (5 Tasks)
+
+### Session Summary
+
+Implemented 5 WBS tasks across Phase 1 and Phase 2: Ruff B+S lint selectors, Indeed feature flag, enrichment crawl policy middleware, API key health checks (supplemented parallel agent's work), and orchestrator startup health summary.
+
+### Completed This Session
+
+- [x] **P1-T04: Ruff B+S selectors** — Added flake8-bugbear (B) and flake8-bandit (S) to ruff config. Fixed B904 (raise-from), B905 (zip strict), B007 (unused loop vars) across 7 files. Suppressed intentional patterns (S110, S112, S311, B027) via ignore/per-file-ignores.
+- [x] **P1-T03: Indeed feature flag** — Gated `_detect_job_postings()` behind `enable_indeed_scraping` config (default: False). Added 3 tests, updated existing tests with class-level config override.
+- [x] **P2-T03: Enrichment crawl policy** — Added `ENRICHMENT_AGENTS` set, `@enrichment_http` decorator, `is_enrichment_agent()` helper, `check_enrichment_permission()` to PolicyChecker. Created `test_middleware_policy.py` with 37 tests (84% coverage on policy.py, up from 0%).
+- [x] **P2-T04: API key health check** — Other parallel agent already implemented core logic. Added missing keys: HUNTER_API_KEY for contact_finder, GOOGLE_PLACES_API_KEY for crossref.
+- [x] **P2-T05: Health summary** — Added `_build_health_summary()` to orchestrator with timestamp, job_id, associations, masked API key booleans, disk_free_gb. Writes to `data/.state/{job_id}/health_check.json`. Fails gracefully on <1GB disk. Added 7 tests.
+
+### Test Results
+
+```
+1,240 passed, 0 failed, 2 warnings (45.80s)
++53 new tests (37 middleware/policy, 3 Indeed flag, 6 enrichment, 7 orchestrator health)
+```
+
+### Files Modified
+
+- `pyproject.toml` — Added B, S to ruff select; added ignore rules and per-file-ignores
+- `middleware/policy.py` — Added ENRICHMENT_AGENTS, @enrichment_http, is_enrichment_agent(), check_enrichment_permission(); fixed B904 raise-from
+- `agents/enrichment/tech_stack.py` — Added enable_indeed_scraping feature flag
+- `agents/base.py` — Added HUNTER_API_KEY and GOOGLE_PLACES_API_KEY to API_KEY_REQUIREMENTS
+- `agents/orchestrator.py` — Added _build_health_summary(), health check in _phase_init()
+- `agents/extraction/pdf_parser.py` — Fixed B905: zip(strict=False)
+- `agents/validation/dedupe.py` — Fixed B905: zip(strict=False)
+- `agents/extraction/event_extractor.py` — Fixed B007: unused loop var
+- `models/ontology.py` — Fixed B007: unused loop var
+- `tests/test_agent_spawner.py` — Fixed B007: unused loop var
+- `tests/test_db_repository.py` — Fixed B007: unused loop var
+- `tests/test_structured_logger.py` — Fixed B905: zip(strict=True)
+- `tests/test_middleware_policy.py` — NEW: 37 tests for policy enforcement
+- `tests/test_enrichment_tech_stack.py` — Added 3 Indeed flag tests, updated existing config
+- `tests/test_orchestrator_hardening.py` — Added 7 health summary tests
+
+### Key Decisions
+
+1. **B/S suppression strategy**: Fixed genuine bugs (B904, B905, B007), suppressed intentional patterns (S110 try-except-pass in resilient parsers, S112 try-except-continue in batch loops, S311 random for jitter, B027 optional hooks).
+2. **Indeed scraping default OFF**: Feature flag defaults to False — no config change needed. Existing tests use class-level override to enable.
+3. **Health summary scope**: Includes masked API key booleans (not values), disk space, mode, dry_run. Fails pipeline only on <1GB disk.
+4. **Circular ref for JSON test**: `json.dumps(obj, default=str)` handles most objects, so used circular reference dict to reliably trigger serialization error.
+
+### Next Session Priorities
+
+1. Run live extraction on SOCMA, AGMA, AIA
+2. Enrich PMA+NEMA records (firmographic, tech stack, contacts)
+3. Test remaining untested modules (export_activation, event_extractor, etc.)
+4. Fix Pydantic V2 deprecation (Config → ConfigDict in ontology.py)
+
+---
+
+## Previous Session: 2026-02-07 (Session 9) — WBS Phase 1 + Documentation Discipline
+
+### Session Summary
+
+Implemented three high-impact tasks from the Work Breakdown Structure Phase 1, plus added documentation discipline to CLAUDE.md. Fixed two production bugs (sync DNS blocking, Jaccard anagram false positives) and cleaned up unused dependencies.
+
+### Completed This Session
+
+- [x] **Documentation Discipline** — Added `## Session Handoff Protocol` to CLAUDE.md with instructions for updating MEMORY.md, HANDOFF.md, and lessons.md every session
+- [x] **`memory/lessons.md`** — Created and seeded with 3 lessons (sync DNS, Jaccard anagram, RefResolver migration)
+- [x] **P1-T05: Dependency cleanup** — Removed unused `aiohttp` and `ratelimit` from requirements.txt; added `aiodns>=3.1.0`
+- [x] **P1-T01: Async DNS upgrade** — Rewrote `_validate_dns_mx()` with three-tier fallback: aiodns (native async) > dnspython (threaded) > socket (threaded). Fixed sync `socket.gethostbyname()` blocking bug.
+- [x] **P1-T02: Edit-distance dedupe** — Replaced Jaccard character-set similarity in `_basic_similarity()` with `rapidfuzz.fuzz.ratio()`. Anagrams no longer score 1.0.
+
+### Test Results
+
+```
+1,187 passed, 0 failed, 2 warnings (53.21s)
++3 new tests (dedupe anagram regression tests)
+```
+
+### Files Modified
+
+- `CLAUDE.md` — Added Session Handoff Protocol section
+- `requirements.txt` — Removed aiohttp, ratelimit; added aiodns>=3.1.0
+- `agents/validation/crossref.py` — Rewrote `_validate_dns_mx()` with 3-tier async DNS
+- `tests/test_validation_crossref.py` — Updated 6 DNS tests for aiodns mocks
+- `agents/validation/dedupe.py` — Rewrote `_basic_similarity()` with rapidfuzz edit distance
+- `tests/test_validation_dedupe.py` — Updated 1 test, added 3 anagram regression tests
+
+### Key Decisions
+
+1. **Three-tier DNS**: aiodns first (native async, no thread overhead), dnspython second (thread pool), socket last (thread pool). All tiers are non-blocking.
+2. **Socket via `asyncio.to_thread()`**: The old code called `socket.gethostbyname()` synchronously in an async method. Now wrapped in `asyncio.to_thread()`.
+3. **rapidfuzz in `_basic_similarity()`**: The method was originally a fallback for when rapidfuzz is unavailable, but since rapidfuzz is in requirements.txt, it now uses it. Pure-Python positional fallback still exists for edge cases.
+
+### Next Session Priorities
+
+1. WBS Phase 1 remaining: P1-T03 (Indeed feature flag), P1-T04 (Ruff selectors)
+2. WBS Phase 2: Orchestrator tests, middleware/policy tests, export_activation tests
+3. Fix camelot-py[base] broken dependency (pdftopng>=0.2.3 not available)
+4. Run live extraction on SOCMA, AGMA, AIA
+5. Enrich extracted PMA/NEMA records
+
+---
+
+## Previous Session: 2026-02-07 (Session 8) — CI/CD Infrastructure Upgrade
 
 ### Session Summary
 

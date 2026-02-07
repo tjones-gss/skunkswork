@@ -77,7 +77,7 @@ class TestAgentSpawnerRegistry:
         """Registry values are fully qualified class paths."""
         from agents.base import AgentSpawner
 
-        for agent_type, module_path in AgentSpawner.AGENT_REGISTRY.items():
+        for _agent_type, module_path in AgentSpawner.AGENT_REGISTRY.items():
             # Should have at least module.class format
             assert "." in module_path
             parts = module_path.rsplit(".", 1)

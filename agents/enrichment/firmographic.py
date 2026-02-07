@@ -157,8 +157,14 @@ class FirmographicAgent(BaseAgent):
                     "firmographic_source": "clearbit"
                 }
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "clearbit_fetch_failed",
+                provider="clearbit",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return None
 
@@ -186,8 +192,14 @@ class FirmographicAgent(BaseAgent):
                     "firmographic_source": "apollo"
                 }
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "apollo_fetch_failed",
+                provider="apollo",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return None
 
@@ -219,8 +231,14 @@ class FirmographicAgent(BaseAgent):
                     "firmographic_source": "zoominfo"
                 }
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "zoominfo_fetch_failed",
+                provider="zoominfo",
+                company_name=company_name,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return None
 
@@ -239,7 +257,15 @@ class FirmographicAgent(BaseAgent):
                         data["firmographic_source"] = "website"
                         return data
 
-            except Exception:
+            except Exception as e:
+                self.log.debug(
+                    "website_scrape_failed",
+                    provider="website",
+                    domain=domain,
+                    path=path,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
                 continue
 
         return None

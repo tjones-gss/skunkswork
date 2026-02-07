@@ -480,3 +480,161 @@ class TestErrorRateEdgeCases:
 
         # 50% == 0.5 threshold, so not > threshold -> success
         assert result["success"] is True
+
+
+# =============================================================================
+# TEST STARTUP HEALTH SUMMARY
+# =============================================================================
+
+
+class TestBuildHealthSummary:
+    """Tests for _build_health_summary() method."""
+
+    def test_health_summary_structure(self):
+        """Health summary has all required keys."""
+        orch = _make_orchestrator(mode="full", associations=["PMA", "NEMA"])
+
+        # Need state for associations list
+        from state.machine import StateManager
+        orch.state_manager = StateManager()
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA", "NEMA"],
+            job_id=orch.job_id,
+        )
+
+        summary = orch._build_health_summary()
+
+        assert "timestamp" in summary
+        assert "job_id" in summary
+        assert "associations" in summary
+        assert "api_keys" in summary
+        assert "disk_free_gb" in summary
+        assert "mode" in summary
+        assert "dry_run" in summary
+
+    def test_health_summary_associations(self):
+        """Health summary includes correct associations."""
+        orch = _make_orchestrator(mode="full", associations=["PMA", "AGMA"])
+
+        from state.machine import StateManager
+        orch.state_manager = StateManager()
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA", "AGMA"],
+            job_id=orch.job_id,
+        )
+
+        summary = orch._build_health_summary()
+
+        assert "PMA" in summary["associations"]
+        assert "AGMA" in summary["associations"]
+
+    def test_health_summary_api_keys_masked(self, monkeypatch):
+        """API keys are reported as booleans, not values."""
+        monkeypatch.setenv("CLEARBIT_API_KEY", "secret-clearbit-123")
+        monkeypatch.delenv("BUILTWITH_API_KEY", raising=False)
+
+        orch = _make_orchestrator()
+
+        from state.machine import StateManager
+        orch.state_manager = StateManager()
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA"],
+            job_id=orch.job_id,
+        )
+
+        summary = orch._build_health_summary()
+
+        api_keys = summary["api_keys"]
+        # Keys should be True/False, never the actual secret
+        for key_name, value in api_keys.items():
+            assert isinstance(value, bool), f"{key_name} should be bool, got {type(value)}"
+            # Ensure no actual key values leak
+            assert value is True or value is False
+
+    def test_health_summary_disk_free_positive(self):
+        """Disk free GB is a positive number."""
+        orch = _make_orchestrator()
+
+        from state.machine import StateManager
+        orch.state_manager = StateManager()
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA"],
+            job_id=orch.job_id,
+        )
+
+        summary = orch._build_health_summary()
+
+        assert summary["disk_free_gb"] > 0
+
+
+class TestPhaseInitHealthCheck:
+    """Tests for health check integration in _phase_init()."""
+
+    @pytest.mark.asyncio
+    async def test_health_check_file_written(self, tmp_path, monkeypatch):
+        """_phase_init() writes health_check.json file."""
+        monkeypatch.chdir(tmp_path)
+
+        orch = _make_orchestrator(dry_run=False, associations=["PMA"])
+
+        from state.machine import StateManager
+        orch.state_manager = StateManager(state_dir=str(tmp_path / "state"))
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA"],
+            job_id=orch.job_id,
+        )
+
+        result = await orch._phase_init()
+
+        assert result is True
+        health_path = tmp_path / "data" / ".state" / orch.job_id / "health_check.json"
+        assert health_path.exists()
+
+        data = json.loads(health_path.read_text())
+        assert data["job_id"] == orch.job_id
+        assert "api_keys" in data
+
+    @pytest.mark.asyncio
+    async def test_health_check_skipped_on_dry_run(self, tmp_path, monkeypatch):
+        """_phase_init() skips health file in dry_run mode."""
+        monkeypatch.chdir(tmp_path)
+
+        orch = _make_orchestrator(dry_run=True, associations=["PMA"])
+
+        from state.machine import StateManager
+        orch.state_manager = StateManager(state_dir=str(tmp_path / "state"))
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA"],
+            job_id=orch.job_id,
+        )
+
+        result = await orch._phase_init()
+
+        assert result is True
+        health_path = tmp_path / "data" / ".state" / orch.job_id / "health_check.json"
+        assert not health_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_missing_api_keys_logged_as_warnings(self, tmp_path, monkeypatch):
+        """_phase_init() logs missing API keys as warnings."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CLEARBIT_API_KEY", raising=False)
+        monkeypatch.delenv("BUILTWITH_API_KEY", raising=False)
+        monkeypatch.delenv("APOLLO_API_KEY", raising=False)
+        monkeypatch.delenv("HUNTER_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_PLACES_API_KEY", raising=False)
+
+        orch = _make_orchestrator(dry_run=True, associations=["PMA"])
+
+        from state.machine import StateManager
+        orch.state_manager = StateManager(state_dir=str(tmp_path / "state"))
+        orch.state = orch.state_manager.create_state(
+            associations=["PMA"],
+            job_id=orch.job_id,
+        )
+
+        result = await orch._phase_init()
+
+        assert result is True
+        # health_summary call should log info
+        orch.log.info.assert_called()

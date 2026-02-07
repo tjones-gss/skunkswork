@@ -9,12 +9,21 @@ line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+select = ["E", "F", "W", "I", "UP", "B", "S"]
 ignore = [
     "E501",   # line too long — handled by formatter
     "E741",   # ambiguous variable name
     "UP007",  # Optional[X] vs X | None — keep existing style
+    "S603",   # subprocess call with shell=False — legitimate usage
+    "S607",   # start process with partial path — legitimate usage
+    "S110",   # try-except-pass — intentional in resilient parsers/DLQ
+    "S112",   # try-except-continue — intentional in batch processing loops
+    "S311",   # non-cryptographic random — used for jitter, not security
+    "B027",   # empty method in ABC without abstract — intentional override hooks
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "B017"]  # assert and broad except assertions expected in tests
 
 [tool.ruff.format]
 quote-style = "double"

@@ -756,7 +756,7 @@ class TestTechStackAgentFingerprint:
     async def test_fingerprint_exception_returns_none(
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
-        """Fingerprint returns None on exception."""
+        """Fingerprint returns None on exception and logs debug."""
         mock_config.return_value.load.return_value = {}
 
         mock_http.return_value.get = AsyncMock(
@@ -770,6 +770,9 @@ class TestTechStackAgentFingerprint:
         result = await agent._detect_fingerprint("acme.com")
 
         assert result is None
+        agent.log.debug.assert_called()
+        call_args = agent.log.debug.call_args
+        assert call_args[0][0] == "website_fingerprint_failed"
 
 
 # =============================================================================
@@ -777,8 +780,86 @@ class TestTechStackAgentFingerprint:
 # =============================================================================
 
 
+class TestTechStackAgentIndeedFeatureFlag:
+    """Tests for Indeed scraping feature flag."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_indeed_disabled_by_default(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Indeed scraping disabled by default returns None immediately."""
+        mock_config.return_value.load.return_value = {}
+        from agents.enrichment.tech_stack import TechStackAgent
+
+        agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+        result = await agent._detect_job_postings("Acme Manufacturing")
+
+        assert result is None
+        # HTTP should NOT have been called
+        mock_http.return_value.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_indeed_enabled_proceeds_to_http(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Indeed scraping enabled proceeds to HTTP call."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "tech_stack": {"enable_indeed_scraping": True}
+            }
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body><p>No tech mentions</p></body></html>"
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.tech_stack import TechStackAgent
+
+        agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+        await agent._detect_job_postings("Acme Manufacturing")
+
+        # HTTP SHOULD have been called (Indeed URL)
+        mock_http.return_value.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_indeed_disabled_logs_warning(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Indeed scraping disabled emits warning log."""
+        mock_config.return_value.load.return_value = {}
+        from agents.enrichment.tech_stack import TechStackAgent
+
+        agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+        await agent._detect_job_postings("Acme Manufacturing")
+
+        agent.log.warning.assert_called_once()
+        call_args = agent.log.warning.call_args
+        assert call_args[0][0] == "indeed_scraping_disabled"
+
+
 class TestTechStackAgentJobPostings:
     """Tests for job posting detection."""
+
+    # All job posting tests below enable Indeed scraping via config
+    INDEED_ENABLED_CONFIG = {
+        "enrichment": {"tech_stack": {"enable_indeed_scraping": True}}
+    }
 
     @pytest.mark.asyncio
     @patch("agents.base.Config")
@@ -789,7 +870,7 @@ class TestTechStackAgentJobPostings:
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
         """Job postings detect ERP mentions."""
-        mock_config.return_value.load.return_value = {}
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -825,7 +906,7 @@ class TestTechStackAgentJobPostings:
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
         """Job postings require at least 2 mentions for confidence."""
-        mock_config.return_value.load.return_value = {}
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -856,7 +937,7 @@ class TestTechStackAgentJobPostings:
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
         """Job postings detect CRM mentions."""
-        mock_config.return_value.load.return_value = {}
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -887,7 +968,7 @@ class TestTechStackAgentJobPostings:
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
         """Job postings select ERP with highest mention count."""
-        mock_config.return_value.load.return_value = {}
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -916,7 +997,7 @@ class TestTechStackAgentJobPostings:
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
         """Job postings return None when no ERP/CRM found."""
-        mock_config.return_value.load.return_value = {}
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -944,7 +1025,7 @@ class TestTechStackAgentJobPostings:
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
         """Job postings return None on 404."""
-        mock_config.return_value.load.return_value = {}
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_response = MagicMock()
         mock_response.status_code = 404
@@ -966,8 +1047,8 @@ class TestTechStackAgentJobPostings:
     async def test_job_postings_exception_returns_none(
         self, mock_limiter, mock_http, mock_logger, mock_config
     ):
-        """Job postings return None on exception."""
-        mock_config.return_value.load.return_value = {}
+        """Job postings return None on exception and logs debug."""
+        mock_config.return_value.load.return_value = self.INDEED_ENABLED_CONFIG
 
         mock_http.return_value.get = AsyncMock(
             side_effect=Exception("Network error")
@@ -980,6 +1061,9 @@ class TestTechStackAgentJobPostings:
         result = await agent._detect_job_postings("Acme Manufacturing")
 
         assert result is None
+        agent.log.debug.assert_called()
+        call_args = agent.log.debug.call_args
+        assert call_args[0][0] == "job_postings_scrape_failed"
 
 
 # =============================================================================

@@ -46,5 +46,8 @@ desktop.ini
 # Claude Code local state
 .claude/
 
+# Playwright MCP runtime
+.playwright-mcp/
+
 # Windows
 nul

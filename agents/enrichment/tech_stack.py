@@ -62,6 +62,7 @@ class TechStackAgent(BaseAgent):
         self.methods = self.agent_config.get("methods", ["builtwith", "website_fingerprint", "job_postings"])
         self.batch_size = self.agent_config.get("batch_size", 50)
         self.skip_if_exists = self.agent_config.get("skip_if_exists", True)
+        self.enable_indeed_scraping = self.agent_config.get("enable_indeed_scraping", False)
 
     async def run(self, task: dict) -> dict:
         """
@@ -188,8 +189,14 @@ class TechStackAgent(BaseAgent):
                     "tech_source": "builtwith"
                 }
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "builtwith_detect_failed",
+                provider="builtwith",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return None
 
@@ -208,7 +215,14 @@ class TechStackAgent(BaseAgent):
             html = response.text.lower()
             headers = dict(response.headers)
 
-        except Exception:
+        except Exception as e:
+            self.log.debug(
+                "website_fingerprint_failed",
+                provider="website_fingerprint",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             return None
 
         tech_stack = []
@@ -275,6 +289,10 @@ class TechStackAgent(BaseAgent):
 
     async def _detect_job_postings(self, company_name: str) -> Optional[dict]:
         """Detect ERP by analyzing job postings."""
+        if not self.enable_indeed_scraping:
+            self.log.warning("indeed_scraping_disabled", msg="Indeed scraping disabled by config; skipping")
+            return None
+
         try:
             # Search Indeed for company jobs
             search_url = f"https://www.indeed.com/jobs?q={quote(company_name)}&l="
@@ -286,7 +304,14 @@ class TechStackAgent(BaseAgent):
             soup = BeautifulSoup(response.text, "lxml")
             job_text = soup.get_text().lower()
 
-        except Exception:
+        except Exception as e:
+            self.log.debug(
+                "job_postings_scrape_failed",
+                provider="job_postings",
+                company_name=company_name,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             return None
 
         # Count ERP mentions

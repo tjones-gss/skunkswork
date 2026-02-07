@@ -9,6 +9,7 @@ import asyncio
 import os
 import re
 import socket
+from datetime import datetime, UTC
 from typing import Optional
 
 from agents.base import BaseAgent
@@ -113,7 +114,7 @@ class CrossRefAgent(BaseAgent):
 
             # Add validation results to record
             record["_validation"] = validation
-            record["validated_at"] = asyncio.get_event_loop().time()
+            record["validated_at"] = datetime.now(UTC).isoformat()
 
             # Calculate validation score
             validation_score = self._calculate_validation_score(validation)
@@ -148,31 +149,73 @@ class CrossRefAgent(BaseAgent):
         }
 
     async def _validate_dns_mx(self, domain: str) -> Optional[bool]:
-        """Validate domain has MX records (can receive email)."""
+        """Validate domain has MX records (can receive email).
+
+        Three-tier fallback:
+        1. aiodns (native async, best)
+        2. dnspython (threaded via asyncio.to_thread)
+        3. socket (threaded via asyncio.to_thread, last resort)
+        """
+        # Tier 1: aiodns (native async)
+        try:
+            import aiodns
+            resolver = aiodns.DNSResolver()
+            try:
+                mx_records = await resolver.query(domain, 'MX')
+                return bool(mx_records)
+            except aiodns.error.DNSError:
+                # No MX — try A record
+                try:
+                    a_records = await resolver.query(domain, 'A')
+                    return bool(a_records)
+                except aiodns.error.DNSError:
+                    return False
+        except ImportError:
+            pass
+        except Exception as e:
+            self.log.warning(
+                "dns_mx_validation_failed",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            return None
+
+        # Tier 2: dnspython (threaded)
         try:
             import dns.resolver
-
-            # Check MX records
             try:
-                mx_records = dns.resolver.resolve(domain, 'MX')
+                mx_records = await asyncio.to_thread(dns.resolver.resolve, domain, 'MX')
                 return bool(mx_records)
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-                # No MX records - check for A record as fallback
                 try:
-                    a_records = dns.resolver.resolve(domain, 'A')
+                    a_records = await asyncio.to_thread(dns.resolver.resolve, domain, 'A')
                     return bool(a_records)
-                except:
+                except Exception as e:
+                    self.log.debug(
+                        "dns_a_fallback_failed",
+                        domain=domain,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
                     return False
-
         except ImportError:
-            # dnspython not installed, try socket
-            try:
-                socket.gethostbyname(domain)
-                return True
-            except socket.gaierror:
-                return False
-        except Exception:
+            pass
+        except Exception as e:
+            self.log.warning(
+                "dns_mx_validation_failed",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             return None
+
+        # Tier 3: socket (threaded — never block the event loop)
+        try:
+            await asyncio.to_thread(socket.gethostbyname, domain)
+            return True
+        except socket.gaierror:
+            return False
 
     async def _validate_google_places(
         self,
@@ -214,8 +257,14 @@ class CrossRefAgent(BaseAgent):
 
                 return False
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.log.warning(
+                "google_places_validation_failed",
+                provider="google_places",
+                company_name=company_name,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
         return None
 
@@ -232,7 +281,14 @@ class CrossRefAgent(BaseAgent):
 
             return response.status_code == 200
 
-        except Exception:
+        except Exception as e:
+            self.log.debug(
+                "linkedin_validation_failed",
+                provider="linkedin",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             return None
 
     def _names_match(self, name1: str, name2: str) -> bool:

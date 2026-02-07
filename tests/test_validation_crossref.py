@@ -92,66 +92,125 @@ def google_places_no_results_response():
 
 
 class TestCrossRefAgentDNS:
-    """Tests for _validate_dns_mx method."""
+    """Tests for _validate_dns_mx method (three-tier: aiodns > dnspython > socket)."""
 
     @pytest.mark.asyncio
     async def test_dns_mx_valid_domain(self, crossref_agent):
-        """Valid domain with MX records returns True."""
-        # DNS is imported inside the function, so we mock the dns.resolver module
+        """Valid domain with MX records returns True via aiodns."""
         mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = [MagicMock()]  # Has records
+        mock_resolver.query = AsyncMock(return_value=[MagicMock()])
 
-        with patch.dict("sys.modules", {"dns.resolver": mock_resolver, "dns": MagicMock()}):
-            # Force reimport by calling the function - it uses try/except for import
-            # The function imports dns.resolver inside, so we test actual behavior
-            pass
+        mock_aiodns = MagicMock()
+        mock_aiodns.DNSResolver.return_value = mock_resolver
+        mock_aiodns.error = MagicMock()
+        mock_aiodns.error.DNSError = type("DNSError", (Exception,), {})
 
-        # Test with real implementation - may return True, False, or None depending on DNS
-        # For unit testing, we verify the function doesn't crash
-        result = await crossref_agent._validate_dns_mx("google.com")
-        assert result in (True, False, None)
+        with patch.dict("sys.modules", {"aiodns": mock_aiodns, "aiodns.error": mock_aiodns.error}):
+            result = await crossref_agent._validate_dns_mx("acme.com")
 
-    @pytest.mark.asyncio
-    async def test_dns_fallback_to_a_record(self, crossref_agent):
-        """Falls back to socket when dnspython unavailable or fails."""
-        # The implementation uses try/except ImportError to fall back to socket
-        # We test that a valid domain returns a result
-        result = await crossref_agent._validate_dns_mx("google.com")
-        # Should return True, False, or None
-        assert result in (True, False, None)
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_dns_invalid_domain(self, crossref_agent):
-        """Invalid domain returns False or None."""
-        result = await crossref_agent._validate_dns_mx("this-domain-definitely-does-not-exist-xyz123.com")
-        # Should return False (not found) or None (error)
-        assert result in (False, None)
+    async def test_dns_a_record_fallback(self, crossref_agent):
+        """Falls back to A record when MX lookup raises DNSError."""
+        dns_error = type("DNSError", (Exception,), {})
+
+        mock_resolver = MagicMock()
+
+        async def query_side_effect(domain, rtype):
+            if rtype == "MX":
+                raise dns_error("No MX")
+            return [MagicMock()]  # A record found
+
+        mock_resolver.query = AsyncMock(side_effect=query_side_effect)
+
+        mock_aiodns = MagicMock()
+        mock_aiodns.DNSResolver.return_value = mock_resolver
+        mock_aiodns.error = MagicMock()
+        mock_aiodns.error.DNSError = dns_error
+
+        with patch.dict("sys.modules", {"aiodns": mock_aiodns, "aiodns.error": mock_aiodns.error}):
+            result = await crossref_agent._validate_dns_mx("acme.com")
+
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_dns_graceful_fallback_to_socket(self, crossref_agent):
-        """Socket fallback works when DNS module unavailable."""
-        # Patch socket.gethostbyname to test the fallback path
-        with patch("socket.gethostbyname") as mock_socket:
-            mock_socket.return_value = "1.2.3.4"
-            # We can't easily force ImportError for dns.resolver without module manipulation
-            # Just verify the method handles errors gracefully
-            result = await crossref_agent._validate_dns_mx("test.com")
-            assert result in (True, False, None)
+    async def test_dns_nxdomain_no_a_record(self, crossref_agent):
+        """Returns False when both MX and A queries raise DNSError."""
+        dns_error = type("DNSError", (Exception,), {})
+
+        mock_resolver = MagicMock()
+        mock_resolver.query = AsyncMock(side_effect=dns_error("Not found"))
+
+        mock_aiodns = MagicMock()
+        mock_aiodns.DNSResolver.return_value = mock_resolver
+        mock_aiodns.error = MagicMock()
+        mock_aiodns.error.DNSError = dns_error
+
+        with patch.dict("sys.modules", {"aiodns": mock_aiodns, "aiodns.error": mock_aiodns.error}):
+            result = await crossref_agent._validate_dns_mx("nonexistent.xyz")
+
+        assert result is False
 
     @pytest.mark.asyncio
-    async def test_dns_socket_fallback_failure(self, crossref_agent):
-        """Socket fallback returns False when resolution fails."""
-        # This tests the actual fallback path
-        result = await crossref_agent._validate_dns_mx("invalid-test-domain-xyz.invalid")
-        assert result in (False, None)
+    async def test_dns_general_exception_returns_none_and_logs(self, crossref_agent):
+        """General exception in aiodns returns None and logs warning."""
+        mock_resolver = MagicMock()
+        mock_resolver.query = AsyncMock(side_effect=RuntimeError("timeout"))
+
+        mock_aiodns = MagicMock()
+        mock_aiodns.DNSResolver.return_value = mock_resolver
+        mock_aiodns.error = MagicMock()
+        mock_aiodns.error.DNSError = type("DNSError", (Exception,), {})
+
+        with patch.dict("sys.modules", {"aiodns": mock_aiodns, "aiodns.error": mock_aiodns.error}):
+            result = await crossref_agent._validate_dns_mx("acme.com")
+
+        assert result is None
+        crossref_agent.log.warning.assert_called()
+        call_args = crossref_agent.log.warning.call_args
+        assert call_args[0][0] == "dns_mx_validation_failed"
 
     @pytest.mark.asyncio
-    async def test_dns_exception_returns_none(self, crossref_agent):
-        """General exception returns None."""
-        # Empty domain should be handled gracefully
-        result = await crossref_agent._validate_dns_mx("")
-        # Empty domain may return False or None
-        assert result in (False, None)
+    async def test_dns_import_error_falls_back_to_socket(self, crossref_agent):
+        """ImportError for aiodns+dnspython falls back to socket via asyncio.to_thread."""
+        import sys
+        saved = {}
+        for mod in ("aiodns", "aiodns.error", "dns", "dns.resolver"):
+            saved[mod] = sys.modules.get(mod)
+            sys.modules[mod] = None  # Force ImportError
+
+        try:
+            with patch("socket.gethostbyname", return_value="1.2.3.4") as mock_socket:
+                result = await crossref_agent._validate_dns_mx("acme.com")
+            assert result is True
+            mock_socket.assert_called_once_with("acme.com")
+        finally:
+            for mod, val in saved.items():
+                if val is not None:
+                    sys.modules[mod] = val
+                else:
+                    sys.modules.pop(mod, None)
+
+    @pytest.mark.asyncio
+    async def test_dns_socket_fallback_gaierror(self, crossref_agent):
+        """Socket fallback returns False on gaierror via asyncio.to_thread."""
+        import sys
+        saved = {}
+        for mod in ("aiodns", "aiodns.error", "dns", "dns.resolver"):
+            saved[mod] = sys.modules.get(mod)
+            sys.modules[mod] = None
+
+        try:
+            with patch("socket.gethostbyname", side_effect=socket.gaierror("not found")):
+                result = await crossref_agent._validate_dns_mx("nonexistent.xyz")
+            assert result is False
+        finally:
+            for mod, val in saved.items():
+                if val is not None:
+                    sys.modules[mod] = val
+                else:
+                    sys.modules.pop(mod, None)
 
 
 # =============================================================================
@@ -207,8 +266,8 @@ class TestCrossRefAgentGooglePlaces:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_places_api_error_returns_none(self, crossref_agent, monkeypatch):
-        """API error returns None."""
+    async def test_places_api_error_returns_none_and_logs(self, crossref_agent, monkeypatch):
+        """API error returns None and logs warning."""
         monkeypatch.setenv("GOOGLE_PLACES_API_KEY", "test-key")
         crossref_agent.http.get = AsyncMock(side_effect=Exception("API Error"))
 
@@ -216,6 +275,9 @@ class TestCrossRefAgentGooglePlaces:
             "Acme Manufacturing", "Detroit", "MI"
         )
         assert result is None
+        crossref_agent.log.warning.assert_called()
+        call_args = crossref_agent.log.warning.call_args
+        assert call_args[0][0] == "google_places_validation_failed"
 
     @pytest.mark.asyncio
     async def test_places_builds_correct_query(self, crossref_agent, monkeypatch):
@@ -401,6 +463,21 @@ class TestCrossRefAgentRun:
             assert "google_places_matched" in record["_validation"]
 
     @pytest.mark.asyncio
+    async def test_run_sets_iso_timestamp(self, crossref_agent, sample_records):
+        """run() sets validated_at as ISO 8601 timestamp string."""
+        crossref_agent._validate_dns_mx = AsyncMock(return_value=True)
+        crossref_agent._validate_google_places = AsyncMock(return_value=True)
+
+        task = {"records": sample_records}
+        result = await crossref_agent.run(task)
+
+        for record in result["records"]:
+            assert "validated_at" in record
+            ts = record["validated_at"]
+            assert isinstance(ts, str)
+            assert "T" in ts  # ISO 8601 format contains 'T'
+
+    @pytest.mark.asyncio
     async def test_run_calculates_validation_score(self, crossref_agent, sample_records):
         """run() calculates validation_score for each record."""
         crossref_agent._validate_dns_mx = AsyncMock(return_value=True)
@@ -503,12 +580,15 @@ class TestCrossRefAgentLinkedIn:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_linkedin_error_returns_none(self, crossref_agent):
-        """LinkedIn error returns None."""
+    async def test_linkedin_error_returns_none_and_logs(self, crossref_agent):
+        """LinkedIn error returns None and logs debug."""
         crossref_agent.http.get = AsyncMock(side_effect=Exception("Connection error"))
 
         result = await crossref_agent._validate_linkedin("acme.com")
         assert result is None
+        crossref_agent.log.debug.assert_called()
+        call_args = crossref_agent.log.debug.call_args
+        assert call_args[0][0] == "linkedin_validation_failed"
 
 
 # =============================================================================

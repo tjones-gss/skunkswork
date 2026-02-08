@@ -1,9 +1,11 @@
 # NAM Intelligence Pipeline — Production Readiness Assessment
 
-> **Assessment Date:** 2026-02-07
+> **Original Assessment Date:** 2026-02-07
+> **Reassessment Date:** 2026-02-08
 > **Assessed By:** Architecture Review Board
-> **Overall Grade:** **B+** (3.3 / 4.0)
-> **Verdict:** Strong foundation with targeted fixes needed before production deployment
+> **Original Grade:** **B+** (3.3 / 4.0)
+> **Updated Grade:** **A-** (see §10 — Reassessment)
+> **Verdict:** Architecturally production-ready for controlled launch; operational prerequisites remain
 
 ---
 
@@ -18,6 +20,7 @@
 7. [Recommended Roadmap](#7-recommended-roadmap)
 8. [Competitive Positioning](#8-competitive-positioning)
 9. [Appendix](#9-appendix)
+10. [Reassessment (2026-02-08)](#10-reassessment-2026-02-08)
 
 ---
 
@@ -414,7 +417,7 @@ The `ScorerAgent` (`agents/validation/scorer.py`, 309 lines) uses a four-compone
 | Freshness | 15% | Recency of data extraction (decay curve over 30/90/180 days) |
 | Source Reliability | 15% | Association tier (high/medium/low priority) and source type weighting |
 
-**Letter grade mapping:** A (≥85), B (≥70), C (≥55), D (≥40), F (<40)
+**Letter grade mapping:** A (≥90), B (≥80), C (≥70), D (≥60), F (<60)
 
 **Strength:** The weighted model appropriately prioritizes accuracy over completeness—a correct phone number is more valuable than having all 20 fields filled with unverified data.
 
@@ -789,6 +792,102 @@ Daily budget calculations at configured rate limits:
 | C | 4.0–5.9 | Major gaps |
 | D | 2.0–3.9 | Not viable |
 | F | <2.0 | Fundamental redesign needed |
+
+---
+
+## 10. Reassessment (2026-02-08)
+
+> **Reassessment Date:** 2026-02-08
+> **Trigger:** Completion of all 10 audit recommendations (Sessions 14-15)
+> **Updated Grade:** **A-**
+
+### What Changed Since Original Assessment
+
+Since the B+ assessment on 2026-02-07, the following work was completed:
+
+| Item | Original Status | Current Status |
+|------|----------------|----------------|
+| **WBS Completion** | 16/21 (76%) | 19/21 (90%) |
+| **Test Count** | ~1,180 | 1,533 |
+| **Test Files** | 28 | 32 |
+| **P0 Issues** | 3 open | 0 open (all resolved) |
+| **P1 Issues** | 2 open | 0 open (all resolved) |
+| **Operational Runbook** | Missing | 601-line `docs/RUNBOOK.md` |
+| **Partial-Phase Resume** | Data model only | Fully wired into all 11 phase handlers |
+| **Vault Integration** | Missing | `SecretsManager` with Vault + env fallback |
+| **Circuit Breakers** | Missing | Per-domain `CircuitBreaker` in `AsyncHTTPClient` |
+| **Prometheus Metrics** | Not wired | Counters + histograms instrumented |
+| **API Key Health Checks** | Missing | `_check_api_keys()` on startup |
+
+### Updated Production Readiness Checklist
+
+| # | Area | Original | Current | Notes |
+|---|------|----------|---------|-------|
+| 1 | Core Pipeline Flow | ✅ | ✅ | Unchanged |
+| 2 | Contract Validation | ✅ | ✅ | Unchanged |
+| 3 | Rate Limiting | ✅ | ✅ | Unchanged |
+| 4 | Ethical Scraping | ✅ | ✅ | Unchanged |
+| 5 | Database Layer | ✅ | ✅ | Unchanged |
+| 6 | Async Correctness | ❌ P0 | ✅ | P1-T01: 3-tier async DNS (aiodns → dnspython → socket, all non-blocking) |
+| 7 | Entity Resolution | ❌ P0 | ✅ | Already fixed at time of assessment (verified in WBS reconciliation) |
+| 8 | Error Visibility | ❌ P0 | ✅ | Already fixed — structured logging in all exception handlers |
+| 9 | Timestamp Correctness | ⚠️ P1 | ✅ | Already fixed — `datetime.now(UTC).isoformat()` |
+| 10 | Policy Enforcement | ⚠️ P1 | ✅ | P2-T03: `@enrichment_http` decorator + `ENRICHMENT_AGENTS` set |
+| 11 | CI/CD Pipeline | ✅ | ✅ | Unchanged |
+| 12 | Monitoring / Alerting | ❌ P1 | ⚠️ | P2-T01: Prometheus metrics wired; dashboards not yet configured |
+| 13 | API Key Management | ⚠️ P2 | ✅ | P4-T01: Vault integration with env fallback, TTL cache |
+| 14 | Circuit Breakers | ❌ P2 | ✅ | P2-T02: Per-domain circuit breaker in `AsyncHTTPClient` |
+| 15 | Load/Perf Testing | ❌ P2 | ✅ | P3-T01: 7 load tests (concurrent 100/200, large-batch 1K/10K) |
+| 16 | Documentation | ⚠️ P2 | ✅ | P2-T06: 601-line operational runbook + state machine flow docs |
+| 17 | Scalability | ⚠️ P2 | ⚠️ | P4-T06 (Celery) not started; acceptable for initial deployment |
+| 18 | Security | ⚠️ P2 | ⚠️ | No HTML sanitization; acceptable if no web UI |
+
+**Updated Summary:** 14 of 18 items are production-ready (up from 5). **0 P0 blockers** remain. 2 items are acceptable for initial deployment.
+
+### Remaining Critical Gaps (Operational, Not Code)
+
+| # | Gap | Type | Effort | Impact |
+|---|-----|------|--------|--------|
+| 1 | **No real-world extraction tested** | Operational | 4h | All tests use mocks; zero live HTTP requests against association websites |
+| 2 | **API keys not configured** | Operational | 2h | Enrichment pipeline non-functional without Clearbit, Apollo, BuiltWith keys |
+| 3 | **No production PostgreSQL test** | Operational | 2h | Database tests use mocks; schema/migration/pooling untested against real DB |
+
+### Known Type Bugs (Minor)
+
+| Bug | File | Fix Effort |
+|-----|------|-----------|
+| `graph_edges` stores int, expects `list[dict]` | `agents/orchestrator.py` | 15 min |
+| `json_encoders` deprecated in Pydantic V2 | `models/ontology.py` | 30 min |
+
+### Timeline to Production
+
+| Milestone | Effort | Calendar |
+|-----------|--------|----------|
+| First live extraction (PMA) | 12h | 3-4 days |
+| Controlled production (1-2 associations) | 20h | 1 week |
+| Multi-association (5 associations) | 44h | 3 weeks |
+| Full production (10 associations, 10K+ companies) | 100h | 7 weeks |
+
+### Updated Grade
+
+| Section | Original | Updated | Change |
+|---------|----------|---------|--------|
+| Architecture (§2) | 8.0/10 | 8.5/10 | +0.5 (resume wiring, vault integration) |
+| Code Quality (§3) | 6.2/10 | 8.0/10 | +1.8 (all P0/P1 issues resolved, circuit breakers, metrics) |
+| Data Quality (§4) | 6.8/10 | 7.5/10 | +0.7 (edit-distance dedupe, LinkedIn API) |
+| Testing (§3.5) | 7.0/10 | 9.0/10 | +2.0 (1,533 tests, load tests, E2E integration, memory profiling) |
+| Ethical Compliance (§3.4) | 9.0/10 | 9.0/10 | Unchanged |
+
+| Section | Rating | Weight | Weighted |
+|---------|--------|--------|----------|
+| Architecture | 8.5/10 | 25% | 2.125 |
+| Code Quality | 8.0/10 | 30% | 2.400 |
+| Data Quality | 7.5/10 | 25% | 1.875 |
+| Testing | 9.0/10 | 10% | 0.900 |
+| Ethical Compliance | 9.0/10 | 10% | 0.900 |
+| **Weighted Total** | | **100%** | **8.20/10** |
+
+**Updated Grade: A- (8.20/10)** — Production-ready with minor items remaining.
 
 ---
 

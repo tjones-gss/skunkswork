@@ -87,17 +87,35 @@ nam-intelligence-pipeline/
 ├── package.json              # Node dependencies
 ├── .env.example              # Environment template
 │
-├── .claude/                  # Claude Code configuration
-│   └── settings.json
-│
-├── agents/                   # Agent implementations
+├── agents/                   # Agent implementations (20 agents)
 │   ├── __init__.py
-│   ├── base.py              # Base agent class
-│   ├── orchestrator.py      # Main orchestrator
-│   ├── discovery/           # Site mapper, link crawler
-│   ├── extraction/          # HTML parser, API client, PDF parser
-│   ├── enrichment/          # Firmographic, tech stack, contacts
-│   └── validation/          # Dedupe, cross-ref, scorer
+│   ├── base.py              # Base agent class + AgentSpawner
+│   ├── orchestrator.py      # Main orchestrator (state machine)
+│   ├── discovery/           # Site mapper, link crawler, page classifier, access gatekeeper
+│   ├── extraction/          # HTML parser, API client, PDF parser, event extractor, event participant extractor
+│   ├── enrichment/          # Firmographic, tech stack, contact finder
+│   ├── validation/          # Dedupe, cross-ref, scorer, entity resolver
+│   ├── intelligence/        # Competitor signal miner, relationship graph builder
+│   ├── export/              # Export activation
+│   └── monitoring/          # Source monitor
+│
+├── middleware/               # Cross-cutting concerns
+│   ├── policy.py            # Crawl policy enforcement
+│   └── secrets.py           # Secrets manager (Vault + env fallback)
+│
+├── contracts/                # Data contracts
+│   ├── validator.py         # JSON Schema validation
+│   └── schemas/             # 48 JSON schema files
+│
+├── models/                   # Data models
+│   └── ontology.py          # Pydantic models (Company, Contact, etc.)
+│
+├── state/                    # Pipeline state management
+│   └── machine.py           # State machine, PipelineState, StateManager
+│
+├── db/                       # Database layer
+│   ├── models.py            # SQLAlchemy models
+│   └── repository.py        # Data access layer
 │
 ├── skills/                   # Agent skill documentation
 │   ├── orchestrator/SKILL.md
@@ -105,21 +123,18 @@ nam-intelligence-pipeline/
 │   ├── extraction/SKILL.md
 │   ├── enrichment/SKILL.md
 │   ├── validation/SKILL.md
-│   └── common/SKILL.md
-│
-├── hooks/                    # Lifecycle hooks
-│   ├── pre_agent.py
-│   ├── post_agent.py
-│   └── on_error.py
+│   └── common/SKILL.py      # Shared utilities (AsyncHTTPClient, RateLimiter, etc.)
 │
 ├── config/                   # Configuration files
 │   ├── associations.yaml    # Association definitions
-│   ├── agents.yaml          # Agent settings
-│   └── schemas/             # Extraction schemas
-│       └── company.yaml
+│   └── agents.yaml          # Agent settings
 │
 ├── scripts/                  # Utility scripts
 │   └── init_db.py           # Database initialization
+│
+├── tests/                    # Test suite (1,520 tests)
+│   ├── conftest.py          # Shared fixtures
+│   └── test_*.py            # 34 test files
 │
 ├── data/                     # Data storage
 │   ├── raw/                 # Raw extracted data
@@ -131,44 +146,68 @@ nam-intelligence-pipeline/
 
 ---
 
-## 🤖 Agent Architecture
+## 🤖 Agent Architecture (20 Agents)
 
 ### Coordination Layer
 
 | Agent | Purpose |
 |-------|---------|
-| **Orchestrator** | Central coordinator, workflow management |
+| **Orchestrator** | Central coordinator, state machine, workflow management |
 
 ### Discovery Layer
 
 | Agent | Purpose |
 |-------|---------|
-| **Site Mapper** | Analyze websites, find directories |
-| **Link Crawler** | Follow pagination, collect URLs |
+| **Access Gatekeeper** | Check robots.txt, ToS, auth requirements before crawling |
+| **Site Mapper** | Analyze websites, find member directories and event pages |
+| **Link Crawler** | Follow pagination, collect URLs, handle JavaScript rendering |
+| **Page Classifier** | Classify page types to route to correct extraction agent |
 
 ### Extraction Layer
 
 | Agent | Purpose |
 |-------|---------|
-| **HTML Parser** | Extract data from web pages |
-| **API Client** | Call enrichment APIs |
-| **PDF Parser** | Extract from PDF directories |
+| **HTML Parser** | Extract structured company data from web pages |
+| **API Client** | Call external enrichment APIs |
+| **PDF Parser** | Extract from PDF directories and documents |
+| **Event Extractor** | Extract event data (conferences, trade shows, webinars) |
+| **Event Participant Extractor** | Extract sponsors, exhibitors, attendees from event pages |
 
 ### Enrichment Layer
 
 | Agent | Purpose |
 |-------|---------|
-| **Firmographic** | Add company size, revenue, industry |
-| **Tech Stack** | Detect ERP, CRM, MES software |
-| **Contact Finder** | Find decision-makers |
+| **Firmographic** | Add company size, revenue, industry, NAICS codes |
+| **Tech Stack** | Detect ERP, CRM, MES software via BuiltWith/job postings |
+| **Contact Finder** | Find decision-makers via Apollo/ZoomInfo |
 
 ### Validation Layer
 
 | Agent | Purpose |
 |-------|---------|
-| **Dedupe** | Merge duplicate records |
-| **Cross-Reference** | Validate against external sources |
-| **Quality Scorer** | Assign quality scores (0-100) |
+| **Dedupe** | Merge duplicate records using edit distance + fuzzy matching |
+| **Cross-Reference** | Validate against DNS, Google Places, LinkedIn (Proxycurl) |
+| **Quality Scorer** | Assign quality scores (0-100) with letter grades (A-F) |
+| **Entity Resolver** | Consolidate records into canonical entities with confidence scores |
+
+### Intelligence Layer
+
+| Agent | Purpose |
+|-------|---------|
+| **Competitor Signal Miner** | Detect competitor ERP/software mentions in association content |
+| **Relationship Graph Builder** | Map company-association-event relationships |
+
+### Export Layer
+
+| Agent | Purpose |
+|-------|---------|
+| **Export Activation** | Generate CSV/JSON/CRM exports with provenance tracking |
+
+### Monitoring Layer
+
+| Agent | Purpose |
+|-------|---------|
+| **Source Monitor** | Detect DOM drift, track source health, alert on changes |
 
 ---
 

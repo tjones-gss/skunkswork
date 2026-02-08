@@ -177,3 +177,37 @@ Lessons learned across multiple Claude Code sessions building the NAM Intelligen
 ### Redis in docker-compose for future-proofing
 - **Why:** Pipeline will need Redis for rate-limit coordination, distributed task queues, and caching enrichment API responses.
 - **Pattern:** Add healthcheck (`redis-cli ping`) and `condition: service_healthy` dependency. Use tmpfs in test compose for fast ephemeral storage.
+
+---
+
+## Production Readiness
+
+### 1,533 tests ≠ production-ready
+- **Lesson:** A comprehensive test suite with 100% pass rate and 85% coverage proves the code works *in isolation with mocks*. It does NOT prove the pipeline works against real association websites, real APIs, or a real PostgreSQL database.
+- **Gap discovered:** All 1,533 tests use mocked HTTP responses, mocked databases, and mocked API keys. Zero live requests have been made against actual association websites (PMA, NEMA, etc.).
+- **Rule:** Before claiming production-ready status, always run at least one end-to-end smoke test against a real data source with `--dry-run` first, then a single full extraction with manual review.
+
+### API keys are an operational prerequisite, not a code issue
+- **Problem:** The enrichment pipeline (firmographic, tech stack, contacts) is fully implemented and tested, but returns empty results without valid API keys for Clearbit, Apollo, and BuiltWith.
+- **Lesson:** Track operational prerequisites (API key procurement, DNS configuration, database provisioning) separately from code tasks in the WBS. They have different owners and timelines.
+- **Required keys:** `CLEARBIT_API_KEY`, `APOLLO_API_KEY`, `BUILTWITH_API_KEY`. Optional: `ZOOMINFO_API_KEY`, `HUNTER_API_KEY`, `GOOGLE_PLACES_API_KEY`.
+
+### Always test with a real database before deployment
+- **Problem:** Database tests mock the PostgreSQL connection. The `docker-compose.yml` wires PostgreSQL 16, but no end-to-end test has been run against a real database instance.
+- **Risk:** Schema mismatches, migration failures, connection pool exhaustion under load, and encoding issues with scraped Unicode data are invisible in mocked tests.
+- **Fix:** Run `docker-compose up postgres`, execute `python scripts/init_db.py`, then run a single-association extraction writing to the real database.
+
+### `graph_edges` serialization mismatch
+- **Problem:** The orchestrator's `_run_graph_phase()` stores an integer count in `state.graph_edges`, but `PipelineState` defines `graph_edges` as `list[dict]`. This will cause a Pydantic validation error when the GRAPH phase runs with real data.
+- **Fix:** Ensure the orchestrator stores the actual edge list (or an empty list) rather than a count integer. ~15 min fix.
+- **Broader lesson:** Type mismatches between the orchestrator and the state model are invisible when tests mock the state object. Integration tests that exercise the full state machine with real `PipelineState` instances would catch these.
+
+### Pydantic V2 `json_encoders` deprecation
+- **Problem:** `models/ontology.py` uses `json_encoders` in `model_config`, which triggers a `PydanticDeprecatedSince20` warning on every test run and will break in Pydantic V3.
+- **Fix:** Migrate to `model_serializer` or `field_serializer` decorators. ~30 min fix.
+- **Note:** Session 11 migrated `Provenance.Config` to `ConfigDict` but the `json_encoders` key itself is still deprecated. The full fix requires replacing `json_encoders` with per-field custom serializers.
+
+### Smoke-test against real websites before scaling
+- **Problem:** HTML structure assumptions, pagination logic, and CSS selectors in extraction agents are based on development-time analysis of association websites. These sites change their DOM structure without notice.
+- **Lesson:** Before running extraction against all 10 associations, always smoke-test against the smallest one (SOCMA, ~200 members) with `--dry-run`. Inspect the output manually. Only then scale to larger associations.
+- **Command:** `python -m agents.orchestrator --mode full -a SOCMA --dry-run`

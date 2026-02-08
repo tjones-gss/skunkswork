@@ -636,3 +636,311 @@ class TestPhaseInitHealthCheck:
         assert result is True
         # health_summary call should log info
         orch.log.info.assert_called()
+
+
+
+# =============================================================================
+# TEST PARTIAL-PHASE RESUME WIRING (P4-T02)
+# =============================================================================
+
+
+def _make_orchestrator_with_state(
+    phase="INIT",
+    companies=None,
+    events=None,
+    phase_progress=None,
+):
+    """Create an orchestrator with a real PipelineState for resume tests."""
+    from state.machine import PipelinePhase, PipelineState, StateManager
+
+    orch = _make_orchestrator(dry_run=True)
+
+    state = PipelineState(association_codes=["PMA"])
+    state_manager = StateManager()
+
+    # Transition to the desired phase
+    phase_order = [
+        PipelinePhase.GATEKEEPER, PipelinePhase.DISCOVERY,
+        PipelinePhase.CLASSIFICATION, PipelinePhase.EXTRACTION,
+        PipelinePhase.ENRICHMENT, PipelinePhase.VALIDATION,
+        PipelinePhase.RESOLUTION, PipelinePhase.GRAPH,
+        PipelinePhase.EXPORT, PipelinePhase.MONITOR,
+    ]
+    target = PipelinePhase(phase) if phase != "INIT" else PipelinePhase.INIT
+    for p in phase_order:
+        if state.current_phase == target:
+            break
+        state.transition_to(p)
+
+    if companies:
+        for c in companies:
+            state.add_company(c)
+    if events:
+        for e in events:
+            state.add_event(e)
+    if phase_progress:
+        state.update_phase_progress(**phase_progress)
+
+    orch.state = state
+    orch.state_manager = state_manager
+    orch.state_manager.checkpoint = MagicMock()
+
+    spawner = MagicMock()
+    spawner.spawn = AsyncMock(return_value={"success": True, "records": []})
+    spawner.spawn_parallel = AsyncMock(return_value=[])
+    orch.spawner = spawner
+
+    return orch
+
+
+class TestPhaseResumeWiring:
+    """Tests for partial-phase resume logic (P4-T02)."""
+
+    # ------------------------------------------------------------------
+    # _execute_phase resume logging
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_execute_phase_logs_resume_when_progress_exists(self):
+        """_execute_phase() logs a resume message when phase_progress is non-empty."""
+        orch = _make_orchestrator_with_state(
+            phase="GATEKEEPER",
+            phase_progress={"checked_domains": ["example.com"]},
+        )
+        await orch._execute_phase(
+            __import__("state.machine", fromlist=["PipelinePhase"]).PipelinePhase.GATEKEEPER
+        )
+        # Should have logged the resume message
+        orch.log.info.assert_any_call(
+            "Resuming phase GATEKEEPER with progress",
+            phase_progress={"checked_domains": ["example.com"]},
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_phase_no_resume_log_when_empty_progress(self):
+        """_execute_phase() does NOT log resume when phase_progress is empty."""
+        orch = _make_orchestrator_with_state(phase="GATEKEEPER")
+        await orch._execute_phase(
+            __import__("state.machine", fromlist=["PipelinePhase"]).PipelinePhase.GATEKEEPER
+        )
+        # Should not have logged "Resuming phase"
+        for call in orch.log.info.call_args_list:
+            if call.args and "Resuming phase" in str(call.args[0]):
+                pytest.fail("Should not log resume when phase_progress is empty")
+
+    # ------------------------------------------------------------------
+    # GATEKEEPER: checked_domains skip
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_gatekeeper_skips_already_checked_domains(self):
+        """GATEKEEPER skips domains already in phase_progress.checked_domains."""
+        orch = _make_orchestrator_with_state(
+            phase="GATEKEEPER",
+            phase_progress={"checked_domains": ["pma.org"]},
+        )
+        # Add a URL for pma.org to the crawl queue
+        orch.state.add_to_queue(url="https://pma.org/members", association="PMA")
+
+        await orch._phase_gatekeeper()
+
+        # spawn should NOT have been called for pma.org (it was already checked)
+        orch.spawner.spawn.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_gatekeeper_processes_new_domains(self):
+        """GATEKEEPER processes domains NOT in phase_progress."""
+        orch = _make_orchestrator_with_state(phase="GATEKEEPER")
+        orch.state.add_to_queue(url="https://nema.org/dir", association="NEMA")
+
+        await orch._phase_gatekeeper()
+
+        orch.spawner.spawn.assert_called_once()
+        # Verify progress was updated
+        assert "nema.org" in orch.state.phase_progress.get("checked_domains", [])
+
+    # ------------------------------------------------------------------
+    # ENRICHMENT: completed_steps skip
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_enrichment_skips_completed_steps(self):
+        """ENRICHMENT skips sub-agents already in completed_steps."""
+        companies = [{"company_name": "Acme", "website": "https://acme.com"}]
+        orch = _make_orchestrator_with_state(
+            phase="ENRICHMENT",
+            companies=companies,
+            phase_progress={"completed_steps": ["firmographic", "tech_stack"]},
+        )
+        orch.spawner.spawn = AsyncMock(
+            return_value={"success": True, "records": companies}
+        )
+
+        await orch._phase_enrichment()
+
+        # Only contact_finder should have been called (firm + tech already done)
+        assert orch.spawner.spawn.call_count == 1
+        call_args = orch.spawner.spawn.call_args
+        assert call_args[0][0] == "enrichment.contact_finder"
+
+    @pytest.mark.asyncio
+    async def test_enrichment_all_steps_completed_no_spawn(self):
+        """ENRICHMENT with all steps complete does not call spawn."""
+        companies = [{"company_name": "Acme"}]
+        orch = _make_orchestrator_with_state(
+            phase="ENRICHMENT",
+            companies=companies,
+            phase_progress={
+                "completed_steps": ["firmographic", "tech_stack", "contact_finder"]
+            },
+        )
+        await orch._phase_enrichment()
+        orch.spawner.spawn.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # VALIDATION: completed_steps skip
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_validation_skips_completed_steps(self):
+        """VALIDATION skips sub-agents already in completed_steps."""
+        companies = [{"company_name": "Acme"}]
+        orch = _make_orchestrator_with_state(
+            phase="VALIDATION",
+            companies=companies,
+            phase_progress={"completed_steps": ["dedupe"]},
+        )
+        orch.spawner.spawn = AsyncMock(
+            return_value={"success": True, "records": companies}
+        )
+
+        await orch._phase_validation()
+
+        # crossref + scorer should have been called (dedupe already done)
+        assert orch.spawner.spawn.call_count == 2
+        agent_types = [c[0][0] for c in orch.spawner.spawn.call_args_list]
+        assert "validation.crossref" in agent_types
+        assert "validation.scorer" in agent_types
+        assert "validation.dedupe" not in agent_types
+
+    # ------------------------------------------------------------------
+    # RESOLUTION: resolved flag
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_resolution_skips_when_already_resolved(self):
+        """RESOLUTION skips entity_resolver when resolved=True."""
+        companies = [{"company_name": "Acme"}]
+        orch = _make_orchestrator_with_state(
+            phase="RESOLUTION",
+            companies=companies,
+            phase_progress={"resolved": True},
+        )
+
+        await orch._phase_resolution()
+        orch.spawner.spawn.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolution_runs_when_not_resolved(self):
+        """RESOLUTION runs entity_resolver when resolved is not set."""
+        companies = [{"company_name": "Acme"}]
+        orch = _make_orchestrator_with_state(
+            phase="RESOLUTION",
+            companies=companies,
+        )
+        orch.spawner.spawn = AsyncMock(
+            return_value={"success": True, "canonical_entities": companies}
+        )
+
+        await orch._phase_resolution()
+        orch.spawner.spawn.assert_called_once()
+        assert orch.state.phase_progress.get("resolved") is True
+
+    # ------------------------------------------------------------------
+    # GRAPH: mined_company_ids + graph_built
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_graph_skips_already_mined_companies(self):
+        """GRAPH skips companies already in mined_company_ids."""
+        companies = [
+            {"company_name": "Acme", "id": "acme-1", "website": "https://acme.com"},
+            {"company_name": "Beta", "id": "beta-2", "website": "https://beta.com"},
+        ]
+        orch = _make_orchestrator_with_state(
+            phase="GRAPH",
+            companies=companies,
+            phase_progress={"mined_company_ids": ["acme-1"]},
+        )
+
+        await orch._phase_graph()
+
+        # Only Beta should have been mined + graph build = 2 calls
+        spawn_calls = orch.spawner.spawn.call_args_list
+        miner_calls = [c for c in spawn_calls if "competitor_signal_miner" in c[0][0]]
+        assert len(miner_calls) == 1
+        assert miner_calls[0][0][1]["source_company_id"] == "beta-2"
+
+    @pytest.mark.asyncio
+    async def test_graph_skips_build_when_already_built(self):
+        """GRAPH skips relationship_graph_builder when graph_built=True."""
+        orch = _make_orchestrator_with_state(
+            phase="GRAPH",
+            phase_progress={"graph_built": True, "mined_company_ids": []},
+        )
+        # No companies, so mining loop is empty; graph_built skips builder
+        await orch._phase_graph()
+
+        # graph builder should NOT have been called
+        for call in orch.spawner.spawn.call_args_list:
+            if "relationship_graph_builder" in str(call):
+                pytest.fail("Should not call graph builder when graph_built=True")
+
+    # ------------------------------------------------------------------
+    # EXPORT: completed_exports skip
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_export_skips_completed_exports(self):
+        """EXPORT skips export types already in completed_exports."""
+        companies = [{"company_name": "Acme", "quality_score": 80}]
+        orch = _make_orchestrator_with_state(
+            phase="EXPORT",
+            companies=companies,
+            phase_progress={"completed_exports": ["companies"]},
+        )
+        orch.dry_run = False
+        orch.spawner.spawn = AsyncMock(return_value={"success": True})
+
+        await orch._phase_export()
+
+        # companies export was skipped; events (no events) + summary called
+        agent_calls = [c[0][1].get("export_type") for c in orch.spawner.spawn.call_args_list]
+        assert "companies" not in agent_calls
+        assert "summary" in agent_calls
+
+    # ------------------------------------------------------------------
+    # Backward compatibility: empty progress starts from beginning
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_enrichment_empty_progress_runs_all_steps(self):
+        """Empty phase_progress runs all enrichment sub-agents."""
+        companies = [{"company_name": "Acme"}]
+        orch = _make_orchestrator_with_state(
+            phase="ENRICHMENT",
+            companies=companies,
+        )
+        orch.spawner.spawn = AsyncMock(
+            return_value={"success": True, "records": companies}
+        )
+
+        await orch._phase_enrichment()
+
+        assert orch.spawner.spawn.call_count == 3
+        agent_types = [c[0][0] for c in orch.spawner.spawn.call_args_list]
+        assert agent_types == [
+            "enrichment.firmographic",
+            "enrichment.tech_stack",
+            "enrichment.contact_finder",
+        ]

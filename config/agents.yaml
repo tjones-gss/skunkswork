@@ -199,6 +199,9 @@ validation:
       - contacts
       - year_founded
       - naics_code
+      - industry
+      - phone
+      - email
     source_scores:
       clearbit: 95
       zoominfo: 90

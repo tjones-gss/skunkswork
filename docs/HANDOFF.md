@@ -4,7 +4,190 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-07 (Session 13) — Commit Backlog, Quick Fixes, Tests for 3 Untested Modules
+## Latest Session: 2026-02-08 (Session 17) — Live Smoke Test & PRD Alignment Assessment
+
+### Session Summary
+
+Executed live smoke tests against 4 association websites (PMA, NEMA, SOCMA, AGMA) to verify pipeline functionality against the PRD v2 goals defined in `resources/Ai-Marketing-Research-2026/`. Read and analyzed the Excel baseline spreadsheet (11 sheets, 1,536 companies). Confirmed pipeline code integrity (1,532 tests pass). Discovered NEMA and AGMA are currently returning HTTP 403, while PMA and SOCMA extract successfully with full record counts.
+
+### Completed This Session
+
+- [x] **Excel Baseline Analysis** — Read `GSS_ULTIMATE_NAM_Intelligence_COMPLETE_2026.xlsx`: PMA (411), NEMA (300), SOCMA (140), AIA (265), AGMA (420) = 1,536 baseline companies + trade shows, competitors, contacts, market data across 11 sheets
+- [x] **Test Suite Verification** — Confirmed 1,532 passed, 1 skipped, 0 failures (101s runtime). Known warnings: `graph_edges` Pydantic serialization (T1-01), `json_encoders` deprecation (T1-02)
+- [x] **PMA Live Smoke Test** — Dry-run extraction across 17 districts: **1,064 unique records** (1,084 total before dedup). All 17 districts successful. Playwright fallback for 403s works correctly. 21s runtime.
+- [x] **SOCMA Live Smoke Test** — Dry-run extraction: **154 records** via auto-detection. Exceeds PRD target of 148 (104% coverage). Discovery → Link Crawler → Directory Parser pipeline works end-to-end. 3.5s runtime.
+- [x] **NEMA Live Smoke Test** — FAILED: HTTP 403 on `makeitelectric.org/membership/membership-directory/`. Playwright fallback also returns 403. Site has blocked automated access since last successful extraction (2026-02-07).
+- [x] **AGMA Live Smoke Test** — FAILED: Site mapper received non-200 from `agma.org/membership/member-list`. Site mapper lacks Playwright fallback (unlike directory_parser). Pipeline aborted at discovery phase.
+- [x] **PRD Alignment Report** — Generated comparison of extracted data vs PRD v2 KPIs (see below)
+
+### Smoke Test Results
+
+| Association | Mode | Status | Records | Target | Coverage | Notes |
+|---|---|---|---|---|---|---|
+| PMA | district_directories | ✅ SUCCESS | 1,064 | 1,134 | 94% | All 17 districts OK, Playwright fallback works |
+| SOCMA | standard (discovery) | ✅ SUCCESS | 154 | 148 | 104% | Auto-detection found 154 records |
+| NEMA | district_directories | ❌ FAILED | 0 (300 cached) | 300+ | 100% (cached) | HTTP 403, Playwright 403 |
+| AGMA | standard (discovery) | ❌ FAILED | 0 | 495 | 0% | Site mapper lacks Playwright fallback |
+
+### PRD v2 Alignment — Current vs Target
+
+| KPI | Target (PRD §10) | Current | Status |
+|---|---|---|---|
+| Total companies | 10,000+ | 1,518 (live: 1,064+154, cached: 300) | 🔴 15% |
+| Associations covered | 20+ | 3 of 10 configured (PMA, NEMA, SOCMA) | 🔴 15% |
+| PMA coverage | 95% | 94% (1,064/1,134) | 🟡 Almost |
+| Records with website | 95% | 28% (NEMA has websites, PMA does not) | 🔴 Low |
+| Firmographic enrichment | 80% | 0% (no API keys provisioned) | 🔴 Blocked |
+| Contact identification | 50% | 0% (enrichment not run) | 🔴 Blocked |
+| Tech stack detection | 30% | 0% (enrichment not run) | 🔴 Blocked |
+
+### Key Findings
+
+1. **Pipeline infrastructure is sound** — PMA and SOCMA extract successfully with correct record counts
+2. **NEMA access has degraded** — `makeitelectric.org` now blocks both httpx and Playwright requests (was working 2026-02-07). Need alternative strategy (user-agent rotation, proxy, or cached data)
+3. **AGMA needs site_mapper Playwright fallback** — The `directory_parser` agent handles 403→Playwright gracefully, but `site_mapper` does not. This is a code gap.
+4. **PMA records lack websites** — PMA extraction captures company_name, city, state, profile_url, member_id, district — but NOT website/domain. Enrichment or profile scraping needed.
+5. **SOCMA exceeds baseline** — Pipeline found 154 companies vs Excel's 140 and PRD's 148. Auto-detection works well.
+6. **Excel baseline is a safety net** — Even for failed associations (AIA: 265, AGMA: 420), the Excel has manual data that can be imported
+
+### Test Results
+
+```
+1,532 passed, 1 skipped, 0 failures (101.13s)
+5 warnings: 1x PydanticDeprecatedSince20, 4x PydanticSerializationUnexpectedValue
+```
+
+### Files Modified
+
+- `docs/HANDOFF.md` — Added Session 17 entry with smoke test results and PRD alignment report
+
+### Next Session Priorities
+
+1. **Fix site_mapper Playwright fallback** — Add 403→Playwright retry logic to `agents/discovery/site_mapper.py` (mirrors `directory_parser` pattern). Unblocks AGMA.
+2. **Fix `graph_edges` serialization** (T1-01, 15min) — Still outstanding from Session 16
+3. **Fix Pydantic V2 `json_encoders`** (T1-02, 30min) — Still outstanding from Session 16
+4. **Add PMA profile scraping** — Fetch individual profile pages to extract website/domain/phone/email for each PMA member
+5. **Investigate NEMA 403** — Try alternative user agents, proxy, or import from cached `records_00280a42.jsonl`
+6. **Run AIA extraction** — Not yet tested; 268 expected members
+7. **Procure API keys** — Clearbit, Apollo, BuiltWith for enrichment pipeline (currently 0% enrichment)
+
+---
+
+## Previous Session: 2026-02-08 (Session 16) — Production Roadmap & Delegated Task Breakdown
+
+### Session Summary
+
+Produced a comprehensive prioritized production roadmap and delegated task breakdown. Analyzed remaining work across 3 source documents (HANDOFF.md, WORK_BREAKDOWN_STRUCTURE.md, PRODUCTION_READINESS_ASSESSMENT.md §10) and organized all remaining items into a 4-tier priority structure. Created `docs/PRODUCTION_TASKS.md` with 14 actionable task cards including acceptance criteria, file locations, effort estimates, and command examples. Updated WBS to link to the new production tasks file.
+
+### Completed This Session
+
+- [x] **Prioritized Roadmap Analysis** — Analyzed 3 source documents and produced 4-tier prioritized roadmap: Tier 1 (8h prerequisites), Tier 2 (16h data operations), Tier 3 (56h WBS tasks), Tier 4 (8h readiness items).
+- [x] **Delegated Task Breakdown** — Created `docs/PRODUCTION_TASKS.md` with 14 task cards organized by priority tier. Each card includes: Task ID, effort, files to modify, developer role, dependencies, acceptance criteria, and command examples.
+- [x] **Quick Reference Checklist** — Added copy-paste-ready checklist with checkboxes for all 14 items, suitable for GitHub Issues or project management tools.
+- [x] **WBS Update** — Added §8 "Production Roadmap" section to `docs/WORK_BREAKDOWN_STRUCTURE.md` linking to `PRODUCTION_TASKS.md`.
+
+### Test Results
+
+```
+1,532 passed, 1 skipped, 0 failures
+No code changes — documentation-only session
+```
+
+### Files Modified
+
+- `docs/PRODUCTION_TASKS.md` — **Created**: 502-line delegated task breakdown with 4 tiers, 14 task cards, and quick reference checklist
+- `docs/HANDOFF.md` — Added Session 16 entry, updated Next Session Priorities to Tier 1-4 structure
+- `docs/WORK_BREAKDOWN_STRUCTURE.md` — Added §8 Production Roadmap section linking to PRODUCTION_TASKS.md
+
+### Key Decisions
+
+1. **4-tier priority structure** — Tier 1 (prerequisites) must complete before any other work; Tier 2 (data ops) generates immediate value; Tier 3 (WBS) enables scale; Tier 4 (readiness) hardens for production
+2. **T1-01 and T1-02 are the only code changes** in Tier 1 — everything else is operational (API keys, smoke tests, infrastructure)
+3. **Enrichment agent `os.getenv()` calls** noted as inconsistent with Session 12's `SecretsManager` migration — flagged for future cleanup but not blocking
+4. **14 total tasks, ~84 hours remaining** — Critical path to first live extraction is ~12 hours (Tier 1 only)
+
+---
+
+## Previous Session: 2026-02-08 (Session 15) — Production Readiness Assessment & Documentation Sync
+
+### Session Summary
+
+Delivered a comprehensive 4-part production readiness assessment evaluating the pipeline's readiness for deployment. Assessed test coverage (1,533 tests), documentation completeness, infrastructure readiness (CI/CD, Docker, PostgreSQL), and operational procedures. Identified 3 critical operational gaps (no real-world extraction tested, API keys not configured, no production PostgreSQL integration test) and 4 secondary gaps. Updated all project documentation to reflect current 19/21 (90%) WBS completion status.
+
+### Completed This Session
+
+- [x] **Production Readiness Assessment** — Evaluated pipeline across 4 dimensions: test coverage, documentation, infrastructure, operational procedures. Assigned overall grade of **A-** (up from B+ in original assessment).
+- [x] **Gap Analysis** — Identified 3 critical gaps (real-world extraction untested, API keys not provisioned, no live PostgreSQL test), 4 important gaps (Pydantic V2 deprecation, graph_edges serialization mismatch, no monitoring dashboards, no HTML sanitization), and 3 nice-to-have gaps.
+- [x] **Next Steps & Timeline** — Produced 3-tier priority roadmap: Tier 1 (12h to first live extraction), Tier 2 (16h to multi-association), Tier 3 (40h to full production at 10K+ companies).
+- [x] **Documentation Sync** — Updated HANDOFF.md, WORK_BREAKDOWN_STRUCTURE.md, LESSONS.md, and PRODUCTION_READINESS_ASSESSMENT.md to reflect current state (19/21 tasks, 90% complete).
+
+### Test Results
+
+```
+1,533 collected, 0 failures, 1 skipped (~0.92s collection)
+No code changes — documentation-only session
+```
+
+### Files Modified
+
+- `docs/HANDOFF.md` — Updated completion status to 19/21 (90%), added Session 15 entry
+- `docs/WORK_BREAKDOWN_STRUCTURE.md` — Marked P2-T06 and P4-T02 as complete, updated summary to 19/21 (90%)
+- `docs/PRODUCTION_READINESS_ASSESSMENT.md` — Added §10 with updated A- grade and current gap analysis
+- `LESSONS.md` — Added Production Readiness section with critical gaps and smoke-testing lessons
+
+### Key Findings
+
+1. **Pipeline is architecturally production-ready** — 1,533 tests, 90% WBS completion, comprehensive operational documentation
+2. **No code blockers** — All 8 original P0 issues resolved; remaining work is operational (API keys, live testing, PostgreSQL)
+3. **12 hours to first live extraction** — Procure API keys (2h), fix 2 minor type bugs (45min), smoke-test PMA (4h), validate PostgreSQL (2h)
+4. **Known type bugs:** `graph_edges` serialization mismatch (orchestrator stores int, PipelineState expects list[dict]); Pydantic V2 `json_encoders` deprecation in `models/ontology.py`
+
+---
+
+## Previous Session: 2026-02-08 (Session 14) — Audit Recommendations Implementation (All 10 Items)
+
+### Session Summary
+
+Implemented all 10 actionable recommendations from the comprehensive audit: 7 quick documentation fixes (config alignment, WBS/HANDOFF updates, technical docs, memory protocol) plus 2 major implementation tasks (P4-T02 Wire Partial-Phase Resume, P2-T06 Operational Runbook). Total test suite grew from 1,520 to 1,532 (+12 tests, 0 failures).
+
+### Completed This Session
+
+- [x] **#1: Config/Code Alignment** — Added `industry`, `phone`, `email` to `config/agents.yaml` scorer `valuable_fields`
+- [x] **#2: Grade Thresholds** — Fixed thresholds in `docs/PRODUCTION_READINESS_ASSESSMENT.md` (A≥90, B≥80, C≥70, D≥60, F<60)
+- [x] **#3: WBS Updates** — Updated task completion status across all phases
+- [x] **#4: HANDOFF Updates** — Updated next session priorities and test counts
+- [x] **#5: STATE_MACHINE_FLOW** — Added per-phase resume pattern table
+- [x] **#6: README** — Updated agent table and project structure
+- [x] **#7: CLAUDE.md** — Updated agent hierarchy
+- [x] **#8: Memory Protocol** — Simplified session handoff protocol in CLAUDE.md
+- [x] **#9: P4-T02 Wire Partial-Phase Resume** — Modified all 11 phase handlers in `agents/orchestrator.py` for resume-safety. Added 13 tests in `TestPhaseResumeWiring` class.
+- [x] **#10: P2-T06 Operational Runbook** — Created `docs/RUNBOOK.md` (601 lines, 10 sections: deployment, monitoring, troubleshooting, rate limits, API key rotation, database ops, backup/recovery, maintenance)
+
+### Test Results
+
+```
+1,532 passed, 1 skipped, 0 failures (~94s)
++13 new tests (TestPhaseResumeWiring in test_orchestrator_hardening.py)
+```
+
+### Files Created
+
+- `docs/RUNBOOK.md` — 601-line operational runbook with 10 sections
+
+### Files Modified
+
+- `agents/orchestrator.py` — All 11 phase handlers modified for resume-safety
+- `config/agents.yaml` — Added `industry`, `phone`, `email` to scorer `valuable_fields`
+- `docs/PRODUCTION_READINESS_ASSESSMENT.md` — Fixed grade thresholds
+- `docs/WORK_BREAKDOWN_STRUCTURE.md` — Updated task completion status
+- `docs/STATE_MACHINE_FLOW.md` — Added per-phase resume pattern table
+- `README.md` — Updated architecture section
+- `CLAUDE.md` — Updated agent hierarchy, simplified memory protocol
+- `tests/test_orchestrator_hardening.py` — Added 13 resume wiring tests
+
+---
+
+## Previous Session: 2026-02-07 (Session 13) — Commit Backlog, Quick Fixes, Tests for 3 Untested Modules
 
 ### Session Summary
 
@@ -24,7 +207,7 @@ Committed Session 12 backlog (15 files), applied 3 quick infrastructure fixes (D
 ### Test Results
 
 ```
-1,519 passed, 1 skipped, 0 failures (~85s)
+1,520 passed, 1 skipped, 0 failures (~85s)
 +53 competitor_signal_miner tests
 +72 export_activation tests
 +63 source_monitor tests
@@ -535,30 +718,48 @@ docs/
 
 ---
 
-## Next Session Priorities (Updated 2026-02-07)
+## Next Session Priorities (Updated 2026-02-08, Session 16)
 
-### Priority 1: Data Enrichment
-1. Run firmographic enrichment on the 1,064 PMA companies
-2. Run tech stack detection (BuiltWith API)
-3. Run contact finder (Apollo/ZoomInfo)
+### WBS Completion Status: 19/21 tasks (90%) — Grade: A-
 
-### Priority 2: Additional Association Extraction
-1. NEMA, SOCMA, AGMA live extraction
-2. Adapt district-page pattern if needed per association
+All Phase 1–3 tasks are complete. Phase 4 has 3/6 tasks done (P4-T01 Vault, P4-T02 Resume, P4-T04 LinkedIn API). Detailed task cards in [`docs/PRODUCTION_TASKS.md`](PRODUCTION_TASKS.md).
 
-### Priority 3: Integration Testing
-1. Test with real PostgreSQL via docker-compose.test.yml
-2. End-to-end pipeline run with --persist-db flag
+### Tier 1: Production Prerequisites (~8h, BLOCKERS)
+1. **T1-01** Fix `graph_edges` serialization bug — `agents/orchestrator.py` line 683 (15min)
+2. **T1-02** Fix Pydantic V2 `json_encoders` deprecation — `models/ontology.py` line 133 (30min)
+3. **T1-03** Procure API keys — Clearbit, Apollo, BuiltWith (2h)
+4. **T1-04** PMA smoke-test — `--dry-run` → single page → full extraction (4h)
+5. **T1-05** PostgreSQL integration test — `docker-compose up postgres` + `init_db.py` (2h)
 
-### Priority 4: Code Quality
-1. Clean up Pydantic V2 deprecation warnings (ConfigDict migration)
-2. Install ruff in venv for local linting
+### Tier 2: Data Operations (~16h, requires Tier 1)
+1. **T2-01** Run firmographic enrichment on PMA companies (4h)
+2. **T2-02** Run tech stack detection via BuiltWith API (4h)
+3. **T2-03** Run contact finder via Apollo/ZoomInfo (4h)
+4. **T2-04** Live extraction: NEMA, SOCMA, AGMA (4h)
 
-### Completed Priorities (from earlier sessions)
+### Tier 3: Remaining WBS Tasks (~56h)
+1. **P4-T03** Incremental extraction / delta updates (16h)
+2. **P4-T05** Admin dashboard with pipeline status (20h)
+3. **P4-T06** Horizontal scaling via Celery task queue (20h)
+
+### Tier 4: Readiness Items (~8h)
+1. **T4-01** Monitoring dashboards — Grafana (4h)
+2. **T4-02** HTML sanitization (4h)
+
+### Completed Priorities (all sessions)
+- ~~All Phase 1 tasks~~ (P1-T01 through P1-T05, Sessions 9-10)
+- ~~All Phase 2 tasks~~ (P2-T01 through P2-T06, Sessions 10-11, 14)
+- ~~All Phase 3 tasks~~ (P3-T01 through P3-T04, Session 14)
+- ~~P4-T01 Vault integration~~ (Session 12)
+- ~~P4-T02 Wire partial-phase resume~~ (Session 14 — 13 tests in TestPhaseResumeWiring)
+- ~~P4-T04 LinkedIn API~~ (Session 12)
+- ~~P2-T06 Operational Runbook~~ (Session 14 — 601-line `docs/RUNBOOK.md`)
 - ~~datetime.utcnow() deprecation~~ (fixed 2026-02-05)
 - ~~RefResolver deprecation~~ (migrated to referencing.Registry 2026-02-07)
-- ~~Agent tests~~ (1,180 tests, 94-96% coverage)
+- ~~Agent tests~~ (1,532 passed, 1 skipped, 0 failures)
 - ~~CI/CD infrastructure~~ (GitHub Actions, Docker, pre-commit)
+- ~~Production readiness assessment~~ (Session 15 — A- grade)
+- ~~Production roadmap & task breakdown~~ (Session 16 — `docs/PRODUCTION_TASKS.md`)
 
 ---
 

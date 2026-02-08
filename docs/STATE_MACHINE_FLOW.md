@@ -487,7 +487,9 @@ FAILED → (terminal)
 
 ## Checkpoint/Resume
 
-The pipeline supports checkpoint/resume:
+The pipeline supports checkpoint/resume at two levels:
+
+### Phase-Level Resume
 
 1. **Automatic checkpoints:** Created at each phase transition
 2. **State file:** `data/.state/{job_id}.state.json`
@@ -497,6 +499,48 @@ To resume a failed pipeline:
 ```bash
 python -m agents.orchestrator --resume {job_id}
 ```
+
+### Intra-Phase Resume (Phase Progress)
+
+The `PipelineState` includes a `phase_progress: dict[str, Any]` field (`state/machine.py` line 157) that tracks progress within a phase. This enables resuming from the middle of a phase rather than restarting it entirely.
+
+**Key methods:**
+- `state.update_phase_progress(**kwargs)` — Merge kwargs into the progress dict
+- `state.clear_phase_progress()` — Reset progress (called automatically by `transition_to()` on phase change)
+
+**Lifecycle:**
+1. During phase execution, handlers call `update_phase_progress()` to record their cursor position
+2. `StateManager.checkpoint()` persists `phase_progress` to disk
+3. On resume, `_execute_phase()` logs the existing progress and calls the handler
+4. Each handler reads `phase_progress` at its start to skip already-processed work
+5. `transition_to()` automatically resets `phase_progress = {}` when moving to a new phase
+
+**Resume behaviour per phase:**
+
+| Phase | Key(s) | Resume Pattern |
+|-------|--------|----------------|
+| GATEKEEPER | `checked_domains: list[str]` | Set-based — skip domains already checked |
+| DISCOVERY | `items_processed: int` | Counter — actual skip via `visited_urls`; counter for observability |
+| CLASSIFICATION | `classified_urls: list[str]` | Set-based — skip pages already classified |
+| EXTRACTION | `items_extracted: int` | Counter — actual skip via `visited_urls`; counter for observability |
+| ENRICHMENT | `completed_steps: list[str]` | Step-list — skip `firmographic`, `tech_stack`, `contact_finder` sub-agents that already ran |
+| VALIDATION | `completed_steps: list[str]` | Step-list — skip `dedupe`, `crossref`, `scorer` sub-agents that already ran |
+| RESOLUTION | `resolved: bool` | Boolean flag — skip entity resolution if already completed |
+| GRAPH | `mined_company_ids: list[str]`, `graph_built: bool` | Set + flag — skip already-mined companies, skip graph build if done |
+| EXPORT | `completed_exports: list[str]` | Step-list — skip `companies`, `events`, `summary` exports that already ran |
+| MONITOR | _(none)_ | Single idempotent call — no tracking needed |
+
+**Backward compatibility:** An empty `phase_progress` dict (the default) means "start from the beginning". All handlers are safe to run with no progress set.
+
+### INIT Phase Health Check
+
+The `_phase_init()` method in the orchestrator runs a health check at startup via `_build_health_summary()`. This checks:
+- Active associations configuration
+- API key availability (masked in logs)
+- Database connectivity
+- Disk space for `data/` directory
+
+If critical resources are unavailable, the health check logs an error and the pipeline may halt before proceeding.
 
 ## Data Flow Diagram
 

@@ -145,7 +145,11 @@ class OrchestratorAgent(BaseAgent):
             return self._build_final_result()
 
     async def _execute_phase(self, phase: PipelinePhase) -> bool:
-        """Execute a single pipeline phase."""
+        """Execute a single pipeline phase.
+
+        Reads ``state.phase_progress`` to allow handlers to skip
+        already-processed items when resuming after a crash.
+        """
         phase_handlers = {
             PipelinePhase.INIT: self._phase_init,
             PipelinePhase.GATEKEEPER: self._phase_gatekeeper,
@@ -162,6 +166,11 @@ class OrchestratorAgent(BaseAgent):
 
         handler = phase_handlers.get(phase)
         if handler:
+            if self.state.phase_progress:
+                self.log.info(
+                    f"Resuming phase {phase.value} with progress",
+                    phase_progress=self.state.phase_progress,
+                )
             return await handler()
 
         return True
@@ -269,6 +278,11 @@ class OrchestratorAgent(BaseAgent):
         """Check access permissions for all queued URLs."""
         self.log.info("Phase: GATEKEEPER - Checking access permissions")
 
+        # Resume: skip domains already checked in a previous run
+        checked_domains: set[str] = set(
+            self.state.phase_progress.get("checked_domains", [])
+        )
+
         # Get unique domains
         domains = set()
         for item in self.state.crawl_queue:
@@ -279,6 +293,10 @@ class OrchestratorAgent(BaseAgent):
 
         # Check each domain
         for domain in domains:
+            if domain in checked_domains:
+                self.log.info(f"Skipping already-checked domain: {domain}")
+                continue
+
             result = await self.spawner.spawn(
                 "discovery.access_gatekeeper",
                 {"domain": domain, "check_page": False}
@@ -293,12 +311,22 @@ class OrchestratorAgent(BaseAgent):
                 for url in blocked_urls:
                     self.state.mark_blocked(url, result.get("reasons", []))
 
+            checked_domains.add(domain)
+            self.state.update_phase_progress(
+                checked_domains=list(checked_domains)
+            )
+
         self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_discovery(self) -> bool:
-        """Discover member URLs from association sites."""
+        """Discover member URLs from association sites.
+
+        Resume-safe: already-visited URLs are skipped via ``visited_urls``.
+        Progress cursor tracks ``items_processed`` for observability.
+        """
         self.log.info("Phase: DISCOVERY - Finding member URLs")
+        items_processed = self.state.phase_progress.get("items_processed", 0)
 
         while self.state.crawl_queue:
             item = self.state.get_next_url()
@@ -341,21 +369,38 @@ class OrchestratorAgent(BaseAgent):
                             page_type_hint="MEMBER_DETAIL"
                         )
 
+            items_processed += 1
+
             # Checkpoint periodically
-            if len(self.state.visited_urls) % 10 == 0:
+            if items_processed % 10 == 0:
+                self.state.update_phase_progress(
+                    items_processed=items_processed
+                )
                 self.state_manager.checkpoint(self.state)
 
+        self.state.update_phase_progress(items_processed=items_processed)
         self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_classification(self) -> bool:
-        """Classify discovered pages by type."""
+        """Classify discovered pages by type.
+
+        Resume-safe: pages whose ``page_type`` is already set (either via
+        ``page_type_hint`` or a prior classification run) are skipped.
+        """
         self.log.info("Phase: CLASSIFICATION - Classifying pages")
 
-        # Classify pages in queue
+        # Resume: skip pages already classified in a previous run
+        classified_urls: set[str] = set(
+            self.state.phase_progress.get("classified_urls", [])
+        )
+
+        # Classify pages in queue that have no type yet
         pages_to_classify = [
             item for item in self.state.crawl_queue
             if not item.get("page_type_hint")
+            and not item.get("page_type")
+            and item.get("url") not in classified_urls
         ]
 
         for item in pages_to_classify[:100]:  # Limit batch size
@@ -368,12 +413,22 @@ class OrchestratorAgent(BaseAgent):
                 item["page_type"] = result.get("page_type")
                 item["extractor"] = result.get("recommended_extractor")
 
+            classified_urls.add(item.get("url", ""))
+            self.state.update_phase_progress(
+                classified_urls=list(classified_urls)
+            )
+
         self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_extraction(self) -> bool:
-        """Extract data from classified pages."""
+        """Extract data from classified pages.
+
+        Resume-safe: already-visited URLs are skipped via ``visited_urls``.
+        Progress cursor tracks ``items_extracted`` for observability.
+        """
         self.log.info("Phase: EXTRACTION - Extracting data")
+        items_extracted = self.state.phase_progress.get("items_extracted", 0)
 
         while self.state.crawl_queue:
             item = self.state.get_next_url()
@@ -417,86 +472,138 @@ class OrchestratorAgent(BaseAgent):
                     for rec in records:
                         self.state.add_company(rec)
 
+            items_extracted += 1
+
             # Checkpoint periodically
-            if len(self.state.visited_urls) % 50 == 0:
+            if items_extracted % 50 == 0:
+                self.state.update_phase_progress(
+                    items_extracted=items_extracted
+                )
                 self.state_manager.checkpoint(self.state)
 
+        self.state.update_phase_progress(items_extracted=items_extracted)
         self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_enrichment(self) -> bool:
-        """Enrich extracted company records."""
+        """Enrich extracted company records.
+
+        Resume-safe: ``completed_steps`` tracks which enrichment sub-agents
+        have already run so they are skipped on restart.
+        """
         self.log.info("Phase: ENRICHMENT - Enriching records")
 
         if not self.state.companies:
             return True
 
-        # Run firmographic enrichment
-        result = await self.spawner.spawn(
-            "enrichment.firmographic",
-            {"records": self.state.companies}
+        completed_steps: list[str] = list(
+            self.state.phase_progress.get("completed_steps", [])
         )
-        if result.get("success"):
-            self.state.companies = result.get("records", self.state.companies)
+
+        # Run firmographic enrichment
+        if "firmographic" not in completed_steps:
+            result = await self.spawner.spawn(
+                "enrichment.firmographic",
+                {"records": self.state.companies}
+            )
+            if result.get("success"):
+                self.state.companies = result.get("records", self.state.companies)
+            completed_steps.append("firmographic")
+            self.state.update_phase_progress(completed_steps=completed_steps)
+            self.state_manager.checkpoint(self.state)
 
         # Run tech stack detection
-        result = await self.spawner.spawn(
-            "enrichment.tech_stack",
-            {"records": self.state.companies}
-        )
-        if result.get("success"):
-            self.state.companies = result.get("records", self.state.companies)
+        if "tech_stack" not in completed_steps:
+            result = await self.spawner.spawn(
+                "enrichment.tech_stack",
+                {"records": self.state.companies}
+            )
+            if result.get("success"):
+                self.state.companies = result.get("records", self.state.companies)
+            completed_steps.append("tech_stack")
+            self.state.update_phase_progress(completed_steps=completed_steps)
+            self.state_manager.checkpoint(self.state)
 
         # Run contact finder
-        result = await self.spawner.spawn(
-            "enrichment.contact_finder",
-            {"records": self.state.companies}
-        )
-        if result.get("success"):
-            self.state.companies = result.get("records", self.state.companies)
+        if "contact_finder" not in completed_steps:
+            result = await self.spawner.spawn(
+                "enrichment.contact_finder",
+                {"records": self.state.companies}
+            )
+            if result.get("success"):
+                self.state.companies = result.get("records", self.state.companies)
+            completed_steps.append("contact_finder")
+            self.state.update_phase_progress(completed_steps=completed_steps)
+            self.state_manager.checkpoint(self.state)
 
-        self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_validation(self) -> bool:
-        """Validate and score records."""
+        """Validate and score records.
+
+        Resume-safe: ``completed_steps`` tracks which validation sub-agents
+        have already run so they are skipped on restart.
+        """
         self.log.info("Phase: VALIDATION - Validating records")
 
         if not self.state.companies:
             return True
 
-        # Run deduplication
-        result = await self.spawner.spawn(
-            "validation.dedupe",
-            {"records": self.state.companies}
+        completed_steps: list[str] = list(
+            self.state.phase_progress.get("completed_steps", [])
         )
-        if result.get("success"):
-            self.state.companies = result.get("records", self.state.companies)
+
+        # Run deduplication
+        if "dedupe" not in completed_steps:
+            result = await self.spawner.spawn(
+                "validation.dedupe",
+                {"records": self.state.companies}
+            )
+            if result.get("success"):
+                self.state.companies = result.get("records", self.state.companies)
+            completed_steps.append("dedupe")
+            self.state.update_phase_progress(completed_steps=completed_steps)
+            self.state_manager.checkpoint(self.state)
 
         # Run cross-reference validation
-        result = await self.spawner.spawn(
-            "validation.crossref",
-            {"records": self.state.companies}
-        )
-        if result.get("success"):
-            self.state.companies = result.get("records", self.state.companies)
+        if "crossref" not in completed_steps:
+            result = await self.spawner.spawn(
+                "validation.crossref",
+                {"records": self.state.companies}
+            )
+            if result.get("success"):
+                self.state.companies = result.get("records", self.state.companies)
+            completed_steps.append("crossref")
+            self.state.update_phase_progress(completed_steps=completed_steps)
+            self.state_manager.checkpoint(self.state)
 
         # Run quality scoring
-        result = await self.spawner.spawn(
-            "validation.scorer",
-            {"records": self.state.companies}
-        )
-        if result.get("success"):
-            self.state.companies = result.get("records", self.state.companies)
+        if "scorer" not in completed_steps:
+            result = await self.spawner.spawn(
+                "validation.scorer",
+                {"records": self.state.companies}
+            )
+            if result.get("success"):
+                self.state.companies = result.get("records", self.state.companies)
+            completed_steps.append("scorer")
+            self.state.update_phase_progress(completed_steps=completed_steps)
+            self.state_manager.checkpoint(self.state)
 
-        self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_resolution(self) -> bool:
-        """Resolve entities to canonical form."""
+        """Resolve entities to canonical form.
+
+        Resume-safe: ``resolved`` flag indicates the single-step resolution
+        has already completed and should be skipped on restart.
+        """
         self.log.info("Phase: RESOLUTION - Resolving entities")
 
         if not self.state.companies:
+            return True
+
+        if self.state.phase_progress.get("resolved"):
+            self.log.info("Skipping resolution - already completed")
             return True
 
         # Run entity resolution
@@ -512,15 +619,29 @@ class OrchestratorAgent(BaseAgent):
             self.state.canonical_entities = result.get("canonical_entities", [])
             self.state.total_entities_resolved = len(self.state.canonical_entities)
 
+        self.state.update_phase_progress(resolved=True)
         self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_graph(self) -> bool:
-        """Build relationship graph."""
+        """Build relationship graph.
+
+        Resume-safe: ``mined_company_ids`` tracks which companies have already
+        been processed for competitor signal mining.  ``graph_built`` indicates
+        the graph-build step has completed.
+        """
         self.log.info("Phase: GRAPH - Building relationship graph")
+
+        mined_company_ids: set[str] = set(
+            self.state.phase_progress.get("mined_company_ids", [])
+        )
 
         # Mine competitor signals
         for company in self.state.companies[:100]:  # Limit for performance
+            company_id = company.get("id", company.get("company_name", ""))
+            if company_id in mined_company_ids:
+                continue
+
             if company.get("website"):
                 result = await self.spawner.spawn(
                     "intelligence.competitor_signal_miner",
@@ -534,30 +655,46 @@ class OrchestratorAgent(BaseAgent):
                     for signal in result.get("signals", []):
                         self.state.add_signal(signal)
 
-        # Build graph
-        result = await self.spawner.spawn(
-            "intelligence.relationship_graph_builder",
-            {
-                "action": "build",
-                "companies": self.state.canonical_entities or self.state.companies,
-                "events": self.state.events,
-                "participants": self.state.participants,
-                "signals": self.state.competitor_signals,
-                "associations": [
-                    {"code": code}
-                    for code in self.state.association_codes
-                ]
-            }
+            mined_company_ids.add(company_id)
+            if len(mined_company_ids) % 10 == 0:
+                self.state.update_phase_progress(
+                    mined_company_ids=list(mined_company_ids)
+                )
+                self.state_manager.checkpoint(self.state)
+
+        # Build graph (skip if already done on a prior run)
+        if not self.state.phase_progress.get("graph_built"):
+            result = await self.spawner.spawn(
+                "intelligence.relationship_graph_builder",
+                {
+                    "action": "build",
+                    "companies": self.state.canonical_entities or self.state.companies,
+                    "events": self.state.events,
+                    "participants": self.state.participants,
+                    "signals": self.state.competitor_signals,
+                    "associations": [
+                        {"code": code}
+                        for code in self.state.association_codes
+                    ]
+                }
+            )
+
+            if result.get("success"):
+                self.state.graph_edges = result.get("edges_created", 0)
+
+        self.state.update_phase_progress(
+            mined_company_ids=list(mined_company_ids),
+            graph_built=True,
         )
-
-        if result.get("success"):
-            self.state.graph_edges = result.get("edges_created", 0)
-
         self.state_manager.checkpoint(self.state)
         return True
 
     async def _phase_export(self) -> bool:
-        """Generate exports."""
+        """Generate exports.
+
+        Resume-safe: ``completed_exports`` tracks which export types
+        (companies, events, summary) have already been generated.
+        """
         self.log.info("Phase: EXPORT - Generating exports")
 
         if self.dry_run:
@@ -566,58 +703,77 @@ class OrchestratorAgent(BaseAgent):
 
         datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Export companies
-        if self.state.canonical_entities or self.state.companies:
-            result = await self.spawner.spawn(
-                "export.export_activation",
-                {
-                    "export_type": "companies",
-                    "format": "csv",
-                    "records": self.state.canonical_entities or self.state.companies,
-                    "filters": {"min_quality": 60}
-                }
-            )
-            if result.get("success"):
-                self.state.add_export({
-                    "type": "companies",
-                    "path": result.get("export_path"),
-                    "count": result.get("records_exported")
-                })
-
-        # Export events
-        if self.state.events:
-            result = await self.spawner.spawn(
-                "export.export_activation",
-                {
-                    "export_type": "events",
-                    "format": "csv",
-                    "records": self.state.events
-                }
-            )
-            if result.get("success"):
-                self.state.add_export({
-                    "type": "events",
-                    "path": result.get("export_path"),
-                    "count": result.get("records_exported")
-                })
-
-        # Generate summary report
-        result = await self.spawner.spawn(
-            "export.export_activation",
-            {
-                "export_type": "summary",
-                "action": "summary_report",
-                "companies": self.state.canonical_entities or self.state.companies,
-                "events": self.state.events,
-                "signals": self.state.competitor_signals
-            }
+        completed_exports: list[str] = list(
+            self.state.phase_progress.get("completed_exports", [])
         )
 
-        self.state_manager.checkpoint(self.state)
+        # Export companies
+        if "companies" not in completed_exports:
+            if self.state.canonical_entities or self.state.companies:
+                result = await self.spawner.spawn(
+                    "export.export_activation",
+                    {
+                        "export_type": "companies",
+                        "format": "csv",
+                        "records": self.state.canonical_entities or self.state.companies,
+                        "filters": {"min_quality": 60}
+                    }
+                )
+                if result.get("success"):
+                    self.state.add_export({
+                        "type": "companies",
+                        "path": result.get("export_path"),
+                        "count": result.get("records_exported")
+                    })
+            completed_exports.append("companies")
+            self.state.update_phase_progress(completed_exports=completed_exports)
+            self.state_manager.checkpoint(self.state)
+
+        # Export events
+        if "events" not in completed_exports:
+            if self.state.events:
+                result = await self.spawner.spawn(
+                    "export.export_activation",
+                    {
+                        "export_type": "events",
+                        "format": "csv",
+                        "records": self.state.events
+                    }
+                )
+                if result.get("success"):
+                    self.state.add_export({
+                        "type": "events",
+                        "path": result.get("export_path"),
+                        "count": result.get("records_exported")
+                    })
+            completed_exports.append("events")
+            self.state.update_phase_progress(completed_exports=completed_exports)
+            self.state_manager.checkpoint(self.state)
+
+        # Generate summary report
+        if "summary" not in completed_exports:
+            result = await self.spawner.spawn(
+                "export.export_activation",
+                {
+                    "export_type": "summary",
+                    "action": "summary_report",
+                    "companies": self.state.canonical_entities or self.state.companies,
+                    "events": self.state.events,
+                    "signals": self.state.competitor_signals
+                }
+            )
+            completed_exports.append("summary")
+            self.state.update_phase_progress(completed_exports=completed_exports)
+            self.state_manager.checkpoint(self.state)
+
         return True
 
     async def _phase_monitor(self) -> bool:
-        """Create monitoring baselines."""
+        """Create monitoring baselines.
+
+        Single idempotent call — re-running is harmless, so no resume
+        tracking is needed.
+        """
         self.log.info("Phase: MONITOR - Creating source baselines")
 
         # Create baselines for discovered directories

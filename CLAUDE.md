@@ -42,13 +42,16 @@ npm run lint                    # ESLint
 
 ## Architecture
 
-### Agent Hierarchy
+### Agent Hierarchy (20 Agents)
 ```
 Orchestrator (agents/orchestrator.py)
-    ├── Discovery Agents: site_mapper, link_crawler
-    ├── Extraction Agents: html_parser, api_client, pdf_parser
+    ├── Discovery Agents: access_gatekeeper, site_mapper, link_crawler, page_classifier
+    ├── Extraction Agents: html_parser, api_client, pdf_parser, event_extractor, event_participant_extractor
     ├── Enrichment Agents: firmographic, tech_stack, contact_finder
-    └── Validation Agents: dedupe, crossref, scorer
+    ├── Validation Agents: dedupe, crossref, scorer, entity_resolver
+    ├── Intelligence Agents: competitor_signal_miner, relationship_graph_builder
+    ├── Export Agents: export_activation
+    └── Monitoring Agents: source_monitor
 ```
 
 All agents inherit from `BaseAgent` (agents/base.py) which provides:
@@ -64,10 +67,17 @@ The `AgentSpawner` class in base.py handles dynamic agent loading:
 - `spawn_parallel(agent_type, tasks, max_concurrent)` - Parallel execution with semaphore
 
 ### Pipeline Flow
-1. **Discovery**: Association URL → Site Mapper → Link Crawler → `data/raw/{assoc}/urls.jsonl`
-2. **Extraction**: URLs → HTML Parser → `data/raw/{assoc}/records.jsonl`
-3. **Enrichment**: Records → Firmographic/TechStack/Contacts → `data/processed/enriched.jsonl`
-4. **Validation**: Enriched → Dedupe/CrossRef/Scorer → `data/validated/{timestamp}/companies.jsonl`
+1. **Init**: Load config, run health check (`_build_health_summary()`)
+2. **Gatekeeper**: Check robots.txt, ToS, auth requirements
+3. **Discovery**: Association URL → Site Mapper → Link Crawler → `data/raw/{assoc}/urls.jsonl`
+4. **Classification**: Page Classifier → route pages by type
+5. **Extraction**: URLs → HTML Parser/Event Extractor → `data/raw/{assoc}/records.jsonl`
+6. **Enrichment**: Records → Firmographic/TechStack/Contacts → `data/processed/enriched.jsonl`
+7. **Validation**: Enriched → Dedupe/CrossRef/Scorer → `data/validated/{timestamp}/companies.jsonl`
+8. **Resolution**: Entity Resolver → canonical entities
+9. **Graph**: Competitor Signal Miner + Relationship Graph Builder
+10. **Export**: Export Activation → CSV/JSON/CRM files
+11. **Monitor**: Source Monitor → baseline tracking
 
 ## Before Performing Any Task
 
@@ -149,27 +159,9 @@ Medium priority: NTMA, PMPA, FIA, NADCA, AFS
 
 Configure in `config/associations.yaml`.
 
-## Session Handoff Protocol
+## Session Handoff
 
-**Every session MUST complete these handoff steps before ending:**
-
-### 1. Update `memory/MEMORY.md`
-- Update "Current Status" section (test count, coverage, extracted companies)
-- Add completed milestones to "Completed Milestones" list
-- Update "Known Gaps" if any were resolved or new ones discovered
-- Update "Potential Next Steps" based on what was accomplished
-
-### 2. Update `docs/HANDOFF.md`
+After completing implementation work, update `docs/HANDOFF.md`:
 - Add a new session entry at the top (after the `---` following the header)
-- Include: Session Summary, Completed This Session, Files Modified, Key Decisions, Next Session Priorities
+- Include: Session Summary, Completed This Session, Files Modified, Key Decisions
 - Follow the template at the bottom of HANDOFF.md
-
-### 3. Update `memory/lessons.md`
-- When a bug is fixed, add a lesson with: symptom, root cause, fix, and takeaway
-- When a challenging problem is solved, document the approach that worked
-- When a wrong approach is tried first, document why it failed
-
-### When to update
-- After completing any implementation task (code changes + tests passing)
-- Before ending a session (final handoff)
-- After discovering a significant bug or architectural insight

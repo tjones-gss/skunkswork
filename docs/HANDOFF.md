@@ -4,7 +4,76 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-08 (Session 22) — Pipeline Finish: Seed Import + AGMA Extraction + NEMA Enrichment + Export
+## Latest Session: 2026-02-09 (Session 23) — Commit Backlog + Free OSINT Enrichment (MX/SPF/Email)
+
+### Session Summary
+Committed all outstanding work from sessions 20-22 (2 logical commits: code+tests and scripts). Enhanced `enrich_batch.py` with three free OSINT enrichment methods — MX record lookup (email provider detection), SPF/TXT record analysis (marketing/CRM service detection), and email pattern guessing. Ran full enrichment on 486 NEMA+AGMA records. Re-ran quality pipeline with 2,116 unique companies across 5 associations.
+
+### Completed This Session
+1. **Commit Backlog** — Two commits for sessions 20-22: (a) 23 files with free enrichment agents, anti-bot mimicry, and 312 new tests; (b) 10 pipeline scripts (seed import, enrichment, PMA scraping, quality pipeline)
+2. **MX Record Lookup** — Added `dns.resolver`-based MX record queries to `enrich_batch.py`. Maps MX hostnames to ~17 email providers (Microsoft 365, Google Workspace, Proofpoint, Mimecast, Barracuda, etc.). Reveals email infrastructure — companies with on-premise mail servers are likely legacy IT (better ERP prospects)
+3. **SPF/TXT Record Analysis** — Parses SPF `include:` directives to detect ~23 services: marketing automation (HubSpot, Marketo, Mailchimp, Brevo), CRM (Salesforce, Pardot), email delivery (SendGrid, Amazon SES, Mandrill), support (Zendesk)
+4. **Email Pattern Guessing** — Generates candidate email addresses for contacts with names but no emails using 6 common B2B patterns
+5. **Full Enrichment Run** — Processed 486 records (54 NEMA + 432 AGMA). 353 enriched successfully, 133 errors (mostly Cloudflare 403). Total 733 enriched records in `enriched_all.jsonl`
+6. **Quality Pipeline Re-run** — 2,116 unique companies, avg quality score 62.8, 6 CSV exports regenerated
+7. **PMA Scraping Attempted** — Cloudflare blocks local Playwright and httpx. MCP Playwright works for individual pages but batch `browser_run_code` has JS escaping issues. Deferred to future session
+
+### Enrichment Results
+| Metric | Count | % of enriched |
+|--------|-------|---------------|
+| Records with tech stack | 587 | 98.0% |
+| Records with CMS detected | 279 | 46.6% |
+| Records with MX records | 322 | 53.8% |
+| Records with email provider | 322 | 53.8% |
+| Records with SPF services | 210 | 35.1% |
+| Records with contact page | 420 | 70.1% |
+
+### Email Provider Distribution (top 5)
+| Provider | Count |
+|----------|-------|
+| Microsoft 365 | 136 |
+| Other/unknown | 80 |
+| Self-hosted (on-premise) | 29 |
+| Proofpoint | 29 |
+| Google Workspace | 18 |
+
+### SPF-Detected Services (top 5)
+| Service | Count |
+|---------|-------|
+| Microsoft 365 | 181 |
+| Salesforce | 22 |
+| Google Workspace | 18 |
+| Amazon SES | 14 |
+| Mailchimp | 13 |
+
+### Files Modified
+- `scripts/enrich_batch.py` — Added MX lookup, SPF analysis, email pattern guessing, PMA input source
+- `scripts/quality_pipeline.py` — Updated fields, scoring, CSV export for new OSINT data
+
+### Files Created
+- `scripts/scrape_pma_httpx.py` — httpx-based PMA scraper (didn't work due to Cloudflare TLS fingerprinting)
+
+### Key Decisions
+- MX/SPF lookups succeed even when homepage returns 403, providing email infrastructure data for WAF-blocked sites
+- Email pattern guessing deferred SMTP verification (too slow at scale, can trigger spam filters)
+- PMA scraping deferred — need either local Playwright CF bypass or batch MCP solution
+- All enrichment methods are free (no API keys needed): Wappalyzer, MX/SPF via dnspython, schema.org, contact page detection
+
+### Pipeline Statistics
+| Metric | Value |
+|--------|-------|
+| Total unique companies | 2,116 |
+| Companies with website | 722 (34.1%) |
+| Companies with tech stack | 629 (29.7%) |
+| Companies with email provider | 382 (18.1%) |
+| Companies with SPF services | 256 (12.1%) |
+| Enriched records | 733 |
+| Average quality score | 62.8 |
+| Associations extracted | 5 (PMA, NEMA, AGMA, SOCMA, AIA) |
+
+---
+
+## Previous Session: 2026-02-08 (Session 22) — Pipeline Finish: Seed Import + AGMA Extraction + NEMA Enrichment + Export
 
 ### Session Summary
 Used a 4-agent parallel team to close the production gap: imported xlsx seed data (SOCMA/AIA/AGMA + events + competitors + contacts), live-extracted AGMA member directory via MCP Playwright browser (432 companies with websites), enriched NEMA records with tech stack detection (15 sample companies), and merged all data into CRM-ready exports.

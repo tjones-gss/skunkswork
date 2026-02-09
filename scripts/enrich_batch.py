@@ -4,6 +4,7 @@ Batch Enrichment Script - Enrich ALL records with domains.
 Sources:
 - data/processed/NEMA/enriched.jsonl (300 records, 285 pending)
 - data/raw/AGMA/records_live.jsonl (432 records with domains)
+- data/raw/PMA/records_enriched.jsonl (PMA profiles with domains from scraper)
 
 For each record with a domain:
 1. Skip already-enriched records (enrichment_status == "complete")
@@ -14,6 +15,9 @@ For each record with a domain:
 6. Schema.org JSON-LD extraction
 7. Contact page detection (/contact, /contact-us, /about, /about-us)
 8. Team page detection (/team, /leadership, /our-team)
+9. MX record lookup (email provider detection)
+10. SPF/TXT record analysis (marketing/CRM service detection)
+11. Email pattern guessing for contacts without emails
 """
 
 import asyncio
@@ -24,7 +28,9 @@ import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
+import dns.resolver
 import httpx
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -32,6 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Input files
 NEMA_ENRICHED = PROJECT_ROOT / "data" / "processed" / "NEMA" / "enriched.jsonl"
 AGMA_RECORDS = PROJECT_ROOT / "data" / "raw" / "AGMA" / "records_live.jsonl"
+PMA_ENRICHED = PROJECT_ROOT / "data" / "raw" / "PMA" / "records_enriched.jsonl"
 
 # Output
 OUTPUT_FILE = PROJECT_ROOT / "data" / "processed" / "enriched_all.jsonl"
@@ -191,6 +198,211 @@ GENERATOR_MAP = {
 
 CONTACT_PATHS = ["/contact", "/contact-us", "/about", "/about-us"]
 TEAM_PATHS = ["/team", "/leadership", "/our-team", "/about/leadership", "/about/team"]
+
+# MX record → email provider mapping
+MX_PROVIDERS = {
+    "google.com": "Google Workspace",
+    "googlemail.com": "Google Workspace",
+    "aspmx.l.google.com": "Google Workspace",
+    "outlook.com": "Microsoft 365",
+    "protection.outlook.com": "Microsoft 365",
+    "mail.protection.outlook.com": "Microsoft 365",
+    "pphosted.com": "Proofpoint",
+    "mimecast.com": "Mimecast",
+    "barracudanetworks.com": "Barracuda",
+    "secureserver.net": "GoDaddy",
+    "emailsrvr.com": "Rackspace",
+    "zoho.com": "Zoho Mail",
+    "zoho.eu": "Zoho Mail",
+    "messagelabs.com": "Broadcom/Symantec",
+    "fireeyecloud.com": "Trellix",
+    "iphmx.com": "Cisco IronPort",
+    "ess.barracuda.com": "Barracuda",
+    "forcepoint.com": "Forcepoint",
+}
+
+# SPF include → service mapping
+SPF_SERVICES = {
+    "spf.protection.outlook.com": "Microsoft 365",
+    "_spf.google.com": "Google Workspace",
+    "servers.mcsv.net": "Mailchimp",
+    "sendgrid.net": "SendGrid",
+    "amazonses.com": "Amazon SES",
+    "mailgun.org": "Mailgun",
+    "mandrillapp.com": "Mandrill",
+    "hubspot.com": "HubSpot",
+    "mktomail.com": "Marketo",
+    "salesforce.com": "Salesforce",
+    "pardot.com": "Pardot",
+    "zendesk.com": "Zendesk",
+    "freshdesk.com": "Freshdesk",
+    "brevo.com": "Brevo",
+    "sendinblue.com": "Brevo",
+    "constantcontact.com": "Constant Contact",
+    "ccsend.com": "Constant Contact",
+    "postmarkapp.com": "Postmark",
+    "sparkpostmail.com": "SparkPost",
+    "createsend.com": "Campaign Monitor",
+    "zoho.com": "Zoho",
+    "exacttarget.com": "Salesforce Marketing Cloud",
+    "netcore.co.in": "Netcore",
+}
+
+# Common email patterns (ordered by frequency in B2B companies)
+EMAIL_PATTERNS = [
+    "{first}.{last}",       # john.doe@domain.com (most common in US B2B)
+    "{first_initial}{last}", # jdoe@domain.com
+    "{first}",              # john@domain.com (small companies)
+    "{first}{last}",        # johndoe@domain.com
+    "{first}_{last}",       # john_doe@domain.com
+    "{last}.{first}",       # doe.john@domain.com
+]
+
+DNS_TIMEOUT = 5  # seconds for DNS queries
+
+
+def lookup_mx_records(domain: str) -> tuple[list[str], str | None]:
+    """Look up MX records for a domain and identify the email provider.
+
+    Returns (mx_records_list, detected_provider_or_None).
+    """
+    mx_records = []
+    provider = None
+
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = DNS_TIMEOUT
+        resolver.lifetime = DNS_TIMEOUT
+        answers = resolver.resolve(domain, "MX")
+        for rdata in answers:
+            mx_host = str(rdata.exchange).rstrip(".").lower()
+            mx_records.append(mx_host)
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+            dns.resolver.NoNameservers, dns.resolver.Timeout,
+            dns.exception.DNSException):
+        return [], None
+
+    # Match MX hostnames against known providers
+    for mx in mx_records:
+        for pattern, prov_name in MX_PROVIDERS.items():
+            if mx.endswith(pattern) or pattern in mx:
+                provider = prov_name
+                break
+        if provider:
+            break
+
+    # Heuristic: if no known provider matched, check if it's self-hosted
+    if not provider and mx_records:
+        # If MX points to the same domain, it's likely on-premise
+        for mx in mx_records:
+            if domain in mx:
+                provider = "Self-hosted (on-premise)"
+                break
+        if not provider:
+            provider = "Other"
+
+    return mx_records, provider
+
+
+def lookup_spf_services(domain: str) -> list[str]:
+    """Parse SPF/TXT records to detect marketing and CRM services.
+
+    Returns list of detected service names.
+    """
+    services = []
+    txt_records = []
+
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = DNS_TIMEOUT
+        resolver.lifetime = DNS_TIMEOUT
+        answers = resolver.resolve(domain, "TXT")
+        for rdata in answers:
+            txt = str(rdata).strip('"')
+            txt_records.append(txt)
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+            dns.resolver.NoNameservers, dns.resolver.Timeout,
+            dns.exception.DNSException):
+        return []
+
+    for txt in txt_records:
+        if not txt.startswith("v=spf1"):
+            continue
+        # Extract include: directives
+        includes = re.findall(r"include:(\S+)", txt)
+        for inc in includes:
+            inc_lower = inc.lower()
+            for pattern, svc_name in SPF_SERVICES.items():
+                if pattern in inc_lower:
+                    if svc_name not in services:
+                        services.append(svc_name)
+                    break
+
+    return services
+
+
+def guess_email_patterns(contacts: list[dict], domain: str) -> list[dict]:
+    """Generate email candidates for contacts that have names but no emails.
+
+    Modifies contacts in-place, adding 'email_candidates' field.
+    Returns the updated contacts list.
+    """
+    updated = []
+    for contact in contacts:
+        c = dict(contact)
+        # Skip if already has an email
+        if c.get("email"):
+            updated.append(c)
+            continue
+
+        name = c.get("name", "").strip()
+        if not name or not domain:
+            updated.append(c)
+            continue
+
+        # Parse name into parts
+        parts = name.split()
+        if len(parts) < 2:
+            updated.append(c)
+            continue
+
+        first = parts[0].lower()
+        last = parts[-1].lower()
+        first_initial = first[0] if first else ""
+
+        # Strip non-alpha characters from name parts
+        first = re.sub(r"[^a-z]", "", first)
+        last = re.sub(r"[^a-z]", "", last)
+        first_initial = re.sub(r"[^a-z]", "", first_initial)
+
+        if not first or not last:
+            updated.append(c)
+            continue
+
+        candidates = []
+        for pattern in EMAIL_PATTERNS:
+            email = pattern.format(
+                first=first, last=last, first_initial=first_initial
+            ) + f"@{domain}"
+            candidates.append(email)
+
+        c["email_candidates"] = candidates
+        updated.append(c)
+
+    return updated
+
+
+def extract_domain_from_url(url: str) -> str:
+    """Extract bare domain from a URL."""
+    if not url:
+        return ""
+    if not url.startswith(("http://", "https://")):
+        url = "http://" + url
+    try:
+        d = urlparse(url).netloc.lower()
+        return d.removeprefix("www.")
+    except Exception:
+        return ""
 
 
 def detect_tech_from_html(html: str) -> list[str]:
@@ -370,6 +582,31 @@ async def enrich_record(client: httpx.AsyncClient, record: dict) -> dict:
             has_team_page = True
             break
 
+    # MX record lookup (email provider detection)
+    mx_records, email_provider = lookup_mx_records(domain)
+    if mx_records:
+        enriched["mx_records"] = mx_records
+        enriched["has_mx"] = True
+        if email_provider:
+            enriched["email_provider"] = email_provider
+    else:
+        enriched["has_mx"] = False
+
+    # SPF/TXT record analysis (marketing/CRM service detection)
+    spf_services = lookup_spf_services(domain)
+    if spf_services:
+        enriched["spf_services"] = spf_services
+        # Merge SPF-detected services into tech_stack
+        for svc in spf_services:
+            if svc not in tech_stack:
+                tech_stack.append(svc)
+        tech_stack.sort()
+
+    # Email pattern guessing for contacts without emails
+    contacts = enriched.get("contacts", [])
+    if contacts and domain:
+        enriched["contacts"] = guess_email_patterns(contacts, domain)
+
     # Build enriched record
     enriched["tech_stack"] = tech_stack
     if cms:
@@ -388,7 +625,7 @@ async def enrich_record(client: httpx.AsyncClient, record: dict) -> dict:
 
 
 def load_records() -> list[dict]:
-    """Load all records from both sources."""
+    """Load all records from all sources."""
     records = []
 
     # Load NEMA enriched records
@@ -411,6 +648,25 @@ def load_records() -> list[dict]:
                     records.append(json.loads(line))
         agma_count = len(records) - nema_count
         print(f"  AGMA: {agma_count} records loaded from {AGMA_RECORDS.name}")
+
+    pre_pma_count = len(records)
+
+    # Load PMA enriched records (from scrape_pma_batch.py output)
+    if PMA_ENRICHED.exists():
+        with open(PMA_ENRICHED) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rec = json.loads(line)
+                    # Ensure domain is set from website
+                    if not rec.get("domain") and rec.get("website"):
+                        rec["domain"] = extract_domain_from_url(rec["website"])
+                    # Tag as PMA if not already
+                    if not rec.get("association"):
+                        rec["association"] = "PMA"
+                    records.append(rec)
+        pma_count = len(records) - pre_pma_count
+        print(f"  PMA:  {pma_count} records loaded from {PMA_ENRICHED.name}")
 
     return records
 
@@ -483,6 +739,10 @@ async def main():
                     extras.append("schema.org")
                 if enriched.get("cms"):
                     extras.append(f"CMS:{enriched['cms']}")
+                if enriched.get("email_provider"):
+                    extras.append(f"MX:{enriched['email_provider']}")
+                if enriched.get("spf_services"):
+                    extras.append(f"SPF:{len(enriched['spf_services'])}")
                 print(f"OK ({', '.join(extras) if extras else 'no tech detected'})")
             else:
                 for e in errs:
@@ -526,6 +786,11 @@ async def main():
     with_contact = [r for r in complete if r.get("has_contact_page")]
     with_team = [r for r in complete if r.get("has_team_page")]
     with_cms = [r for r in complete if r.get("cms")]
+    with_mx = [r for r in complete if r.get("has_mx")]
+    with_email_prov = [r for r in complete if r.get("email_provider")]
+    with_spf = [r for r in complete if r.get("spf_services")]
+    with_email_cands = [r for r in complete
+                        if any(c.get("email_candidates") for c in r.get("contacts", []))]
 
     print()
     print("=" * 70)
@@ -541,11 +806,15 @@ async def main():
 
     total_complete = len(complete)
     if total_complete > 0:
-        print(f"Records with tech stack: {len(with_tech)}/{total_complete} ({len(with_tech)/total_complete*100:.1f}%)")
-        print(f"Records with schema.org: {len(with_schema)}/{total_complete} ({len(with_schema)/total_complete*100:.1f}%)")
-        print(f"Records with contact pg: {len(with_contact)}/{total_complete} ({len(with_contact)/total_complete*100:.1f}%)")
-        print(f"Records with team page:  {len(with_team)}/{total_complete} ({len(with_team)/total_complete*100:.1f}%)")
-        print(f"Records with CMS:        {len(with_cms)}/{total_complete} ({len(with_cms)/total_complete*100:.1f}%)")
+        print(f"Records with tech stack:   {len(with_tech)}/{total_complete} ({len(with_tech)/total_complete*100:.1f}%)")
+        print(f"Records with schema.org:   {len(with_schema)}/{total_complete} ({len(with_schema)/total_complete*100:.1f}%)")
+        print(f"Records with contact pg:   {len(with_contact)}/{total_complete} ({len(with_contact)/total_complete*100:.1f}%)")
+        print(f"Records with team page:    {len(with_team)}/{total_complete} ({len(with_team)/total_complete*100:.1f}%)")
+        print(f"Records with CMS:          {len(with_cms)}/{total_complete} ({len(with_cms)/total_complete*100:.1f}%)")
+        print(f"Records with MX records:   {len(with_mx)}/{total_complete} ({len(with_mx)/total_complete*100:.1f}%)")
+        print(f"Records with email prov:   {len(with_email_prov)}/{total_complete} ({len(with_email_prov)/total_complete*100:.1f}%)")
+        print(f"Records with SPF services: {len(with_spf)}/{total_complete} ({len(with_spf)/total_complete*100:.1f}%)")
+        print(f"Records with email cands:  {len(with_email_cands)}/{total_complete} ({len(with_email_cands)/total_complete*100:.1f}%)")
 
     # Top 10 technologies
     tech_counter = Counter()
@@ -570,6 +839,31 @@ async def main():
         print("-" * 40)
         for cms, count in cms_counter.most_common(10):
             print(f"  {cms:<30} {count:>4}")
+
+    # Email provider distribution
+    provider_counter = Counter()
+    for r in complete:
+        prov = r.get("email_provider")
+        if prov:
+            provider_counter[prov] += 1
+    if provider_counter:
+        print()
+        print("EMAIL PROVIDER DISTRIBUTION:")
+        print("-" * 40)
+        for prov, count in provider_counter.most_common(10):
+            print(f"  {prov:<30} {count:>4} ({count/total_complete*100:.1f}%)")
+
+    # SPF services distribution
+    spf_counter = Counter()
+    for r in complete:
+        for svc in r.get("spf_services", []):
+            spf_counter[svc] += 1
+    if spf_counter:
+        print()
+        print("SPF-DETECTED SERVICES:")
+        print("-" * 40)
+        for svc, count in spf_counter.most_common(15):
+            print(f"  {svc:<30} {count:>4} ({count/total_complete*100:.1f}%)")
 
     # Error breakdown
     if error_types:

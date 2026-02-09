@@ -50,6 +50,7 @@ SALESFORCE_MAPPING = {
     "company_name": "Account Name",
     "website": "Website",
     "domain": "Domain__c",
+    "phone": "Phone",
     "city": "BillingCity",
     "state": "BillingState",
     "country": "BillingCountry",
@@ -63,6 +64,8 @@ SALESFORCE_MAPPING = {
     "sector": "Sector__c",
     "notes": "Notes__c",
     "tech_stack": "Tech_Stack__c",
+    "email_provider": "Email_Provider__c",
+    "cms": "CMS__c",
 }
 
 # ---------------------------------------------------------------------------
@@ -344,6 +347,7 @@ REQUIRED_FIELDS = ["company_name", "website", "city", "state"]
 VALUABLE_FIELDS = [
     "employee_count_min", "revenue_min_usd", "erp_system", "contacts",
     "year_founded", "naics_code", "industry", "phone", "email",
+    "email_provider", "tech_stack", "spf_services",
 ]
 SCORE_WEIGHTS = {
     "completeness": 0.30,
@@ -383,9 +387,12 @@ def score_accuracy(rec: dict) -> float:
         score += 10
     if rec.get("enrichment_status") == "complete":
         score += 10
+    # MX records confirm the domain is real and receives email
+    if rec.get("has_mx") is True:
+        score += 10
     validation = rec.get("_validation", {})
     if validation.get("dns_mx_valid") is True:
-        score += 15
+        score += 5
     elif validation.get("dns_mx_valid") is False:
         score -= 15
     return max(0, min(100, score))
@@ -482,9 +489,11 @@ def score_records(records: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 ALL_CSV_FIELDS = [
     "company_name", "associations", "website", "domain",
-    "city", "state", "country", "member_type", "industry", "sector",
-    "notes", "tech_stack", "enrichment_status", "quality_score", "quality_grade",
-    "source_url", "extracted_at",
+    "city", "state", "country", "phone", "member_type", "industry", "sector",
+    "employee_count_min", "employee_count_max",
+    "notes", "tech_stack", "cms", "email_provider", "spf_services",
+    "enrichment_status", "quality_score", "quality_grade",
+    "contacts", "source_url", "extracted_at",
 ]
 
 
@@ -495,10 +504,18 @@ def _prep_row(rec: dict) -> dict:
         row["associations"] = "; ".join(row["associations"])
     if isinstance(row.get("tech_stack"), list):
         row["tech_stack"] = "; ".join(row["tech_stack"])
+    if isinstance(row.get("spf_services"), list):
+        row["spf_services"] = "; ".join(row["spf_services"])
     if isinstance(row.get("contacts"), list):
-        row["contacts"] = "; ".join(
-            c.get("name", "") or c.get("email", "") for c in row["contacts"]
-        )
+        parts = []
+        for c in row["contacts"]:
+            name = c.get("name", "")
+            email = c.get("email", "")
+            if email:
+                parts.append(f"{name} <{email}>" if name else email)
+            elif name:
+                parts.append(name)
+        row["contacts"] = "; ".join(parts)
     return row
 
 
@@ -634,6 +651,7 @@ def main():
     coverage_fields = [
         "website", "domain", "city", "state", "tech_stack",
         "industry", "employee_count_min", "revenue_min_usd",
+        "email_provider", "spf_services", "phone",
     ]
 
     for rec in deduped:

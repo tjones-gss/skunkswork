@@ -1273,3 +1273,293 @@ class TestTechStackAgentMethodFallback:
 
         assert result["records"][0]["erp_system"] == "SAP"
         assert result["records"][0]["tech_source"] == "website_fingerprint"
+
+
+# =============================================================================
+# TEST WAPPALYZER DETECTION
+# =============================================================================
+
+
+class TestTechStackAgentWappalyzer:
+    """Tests for Wappalyzer tech stack detection."""
+
+    @staticmethod
+    def _make_wappalyzer_module(analyze_return):
+        """Create a mock Wappalyzer module for injection into sys.modules.
+
+        The _detect_wappalyzer method does `from Wappalyzer import Wappalyzer, WebPage`
+        inside the function body (lazy import). We must inject a mock module into
+        sys.modules so the local import picks it up.
+        """
+        mock_wap_instance = MagicMock()
+        mock_wap_instance.analyze_with_categories.return_value = analyze_return
+
+        mock_wap_class = MagicMock()
+        mock_wap_class.latest.return_value = mock_wap_instance
+
+        mock_webpage_class = MagicMock()
+
+        mock_module = MagicMock()
+        mock_module.Wappalyzer = mock_wap_class
+        mock_module.WebPage = mock_webpage_class
+        return mock_module
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_detects_technologies(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer detects technologies from HTML."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html><head><script src="/wp-includes/js/jquery.js"></script></head><body></body></html>'
+        mock_response.headers = {"Server": "nginx"}
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        mock_mod = self._make_wappalyzer_module({
+            "WordPress": {"categories": ["CMS"]},
+            "jQuery": {"categories": ["JavaScript libraries"]},
+            "nginx": {"categories": ["Web servers"]},
+        })
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result is not None
+        assert "WordPress" in result["tech_stack"]
+        assert result["tech_source"] == "wappalyzer"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_detects_erp_by_category(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer detects ERP system by category."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body>SAP powered</body></html>"
+        mock_response.headers = {}
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        mock_mod = self._make_wappalyzer_module({
+            "SAP": {"categories": ["ERP"]},
+        })
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result["erp_system"] == "SAP"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_detects_crm_by_category(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer detects CRM system by category."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body></body></html>"
+        mock_response.headers = {}
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        mock_mod = self._make_wappalyzer_module({
+            "HubSpot": {"categories": ["Marketing automation", "CRM"]},
+        })
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result["crm_system"] == "HubSpot"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_erp_keyword_fallback(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer falls back to ERP keyword matching."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body></body></html>"
+        mock_response.headers = {}
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        mock_mod = self._make_wappalyzer_module({
+            "Epicor Kinetic": {"categories": ["Business tools"]},
+        })
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        # Should detect Epicor via keyword matching even without ERP category
+        assert result["erp_system"] == "Epicor"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_import_error_returns_none(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer returns None when library not installed."""
+        mock_config.return_value.load.return_value = {}
+
+        from agents.enrichment.tech_stack import TechStackAgent
+
+        agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+        # Setting a module to None in sys.modules causes ImportError on `from X import ...`
+        with patch.dict("sys.modules", {"Wappalyzer": None}):
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_empty_results_returns_none(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer returns None when no technologies detected."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body>Hello</body></html>"
+        mock_response.headers = {}
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        mock_mod = self._make_wappalyzer_module({})
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_404_returns_none(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer returns None when website returns 404."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        mock_mod = self._make_wappalyzer_module({})
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("nonexistent.xyz")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_exception_returns_none(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer returns None on exception and logs warning."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=Exception("Network error")
+        )
+
+        mock_mod = self._make_wappalyzer_module({})
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result is None
+        agent.log.warning.assert_called()
+        call_args = agent.log.warning.call_args
+        assert call_args[0][0] == "wappalyzer_detect_failed"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_wappalyzer_limits_tech_stack_to_20(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Wappalyzer limits tech stack to 20 items."""
+        mock_config.return_value.load.return_value = {}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body></body></html>"
+        mock_response.headers = {}
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        # Create 25 technologies
+        techs = {f"Tech{i}": {"categories": []} for i in range(25)}
+        mock_mod = self._make_wappalyzer_module(techs)
+
+        with patch.dict("sys.modules", {"Wappalyzer": mock_mod}):
+            from agents.enrichment.tech_stack import TechStackAgent
+
+            agent = TechStackAgent(agent_type="enrichment.tech_stack")
+
+            result = await agent._detect_wappalyzer("acme.com")
+
+        assert result is not None
+        assert len(result["tech_stack"]) <= 20

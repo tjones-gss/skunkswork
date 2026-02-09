@@ -50,7 +50,7 @@ class ContactFinderAgent(BaseAgent):
 
     def _setup(self, **kwargs):
         """Initialize contact finder settings."""
-        self.providers = self.agent_config.get("providers", ["apollo", "website"])
+        self.providers = self.agent_config.get("providers", ["apollo", "website", "hunter"])
         self.target_titles = self.agent_config.get("target_titles", [])
         self.max_contacts = self.agent_config.get("max_contacts_per_company", 5)
         self.batch_size = self.agent_config.get("batch_size", 50)
@@ -113,6 +113,9 @@ class ContactFinderAgent(BaseAgent):
                         all_contacts.extend(contacts)
                     elif provider == "website" and domain:
                         contacts = await self._scrape_team_page(domain)
+                        all_contacts.extend(contacts)
+                    elif provider == "hunter" and domain:
+                        contacts = await self._search_hunter(domain)
                         all_contacts.extend(contacts)
 
                 except Exception as e:
@@ -238,7 +241,9 @@ class ContactFinderAgent(BaseAgent):
         team_paths = [
             "/about/team", "/about/leadership", "/about-us/team",
             "/team", "/leadership", "/management", "/our-team",
-            "/about/management", "/about/executives"
+            "/about/management", "/about/executives",
+            "/people", "/staff", "/executives",
+            "/board-of-directors", "/company/team", "/about/our-team",
         ]
 
         for path in team_paths:
@@ -398,6 +403,102 @@ class ContactFinderAgent(BaseAgent):
     def _sort_by_priority(self, contacts: list[dict]) -> list[dict]:
         """Sort contacts by title priority."""
         return sorted(contacts, key=lambda c: self._get_title_priority(c.get("title", "")))
+
+    async def _search_hunter(self, domain: str) -> list[dict]:
+        """Search Hunter.io for contacts at a domain (free tier: 25 searches/month)."""
+        api_key = self.get_secret("HUNTER_API_KEY")
+        if not api_key:
+            return []
+
+        try:
+            response = await self.http.get(
+                "https://api.hunter.io/v2/domain-search",
+                params={
+                    "domain": domain,
+                    "api_key": api_key,
+                    "limit": 10,
+                },
+                timeout=15,
+                retries=1,
+            )
+
+            if response.status_code != 200:
+                return []
+
+            data = response.json().get("data", {})
+            contacts = []
+
+            for email_entry in data.get("emails", []):
+                first = email_entry.get("first_name", "")
+                last = email_entry.get("last_name", "")
+                name = f"{first} {last}".strip() if first or last else None
+
+                contact = {
+                    "email": email_entry.get("value"),
+                    "source": "hunter",
+                }
+                if name:
+                    contact["name"] = name
+                if email_entry.get("position"):
+                    contact["title"] = email_entry["position"]
+                if email_entry.get("phone_number"):
+                    contact["phone"] = email_entry["phone_number"]
+                if email_entry.get("linkedin"):
+                    contact["linkedin_url"] = email_entry["linkedin"]
+
+                contacts.append(contact)
+
+            return contacts
+
+        except Exception as e:
+            self.log.warning(
+                "hunter_search_failed",
+                provider="hunter",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+
+        return []
+
+    async def _verify_email_hunter(self, email: str) -> dict | None:
+        """Verify a single email via Hunter.io (free tier: 50 verifications/month).
+
+        Returns verification result or None if API key unavailable.
+        """
+        api_key = self.get_secret("HUNTER_API_KEY")
+        if not api_key:
+            return None
+
+        try:
+            response = await self.http.get(
+                "https://api.hunter.io/v2/email-verifier",
+                params={"email": email, "api_key": api_key},
+                timeout=15,
+                retries=1,
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json().get("data", {})
+            return {
+                "email": email,
+                "status": data.get("status"),  # valid, invalid, accept_all, webmail, disposable, unknown
+                "score": data.get("score"),  # 0-100
+                "verified": data.get("status") == "valid",
+            }
+
+        except Exception as e:
+            self.log.warning(
+                "hunter_verify_failed",
+                provider="hunter",
+                email=email,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+
+        return None
 
     def _dedupe_contacts(self, contacts: list[dict]) -> list[dict]:
         """Deduplicate contacts by email or name."""

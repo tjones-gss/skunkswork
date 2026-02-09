@@ -55,7 +55,7 @@ class TechStackAgent(BaseAgent):
 
     def _setup(self, **kwargs):
         """Initialize tech stack settings."""
-        self.methods = self.agent_config.get("methods", ["builtwith", "website_fingerprint", "job_postings"])
+        self.methods = self.agent_config.get("methods", ["wappalyzer", "builtwith", "website_fingerprint", "job_postings"])
         self.batch_size = self.agent_config.get("batch_size", 50)
         self.skip_if_exists = self.agent_config.get("skip_if_exists", True)
         self.enable_indeed_scraping = self.agent_config.get("enable_indeed_scraping", False)
@@ -109,7 +109,9 @@ class TechStackAgent(BaseAgent):
 
             for method in self.methods:
                 try:
-                    if method == "builtwith" and domain:
+                    if method == "wappalyzer" and domain:
+                        tech_data = await self._detect_wappalyzer(domain)
+                    elif method == "builtwith" and domain:
                         tech_data = await self._detect_builtwith(domain)
                     elif method == "website_fingerprint" and domain:
                         tech_data = await self._detect_fingerprint(domain)
@@ -147,6 +149,86 @@ class TechStackAgent(BaseAgent):
             "detection_rate": detection_rate,
             "records_processed": len(records)
         }
+
+    async def _detect_wappalyzer(self, domain: str) -> dict | None:
+        """Detect tech stack using Wappalyzer (free, no API key needed)."""
+        try:
+            from Wappalyzer import Wappalyzer, WebPage
+        except ImportError:
+            self.log.debug(
+                "wappalyzer_not_installed",
+                msg="python-Wappalyzer not installed; skipping",
+            )
+            return None
+
+        try:
+            url = f"https://{domain}"
+            response = await self.http.get(url, timeout=15, retries=1)
+
+            if response.status_code != 200:
+                return None
+
+            webpage = WebPage(url, response.text, dict(response.headers))
+            wappalyzer = Wappalyzer.latest()
+            results = wappalyzer.analyze_with_categories(webpage)
+
+            if not results:
+                return None
+
+            tech_stack = []
+            erp_system = None
+            crm_system = None
+
+            # ERP category names used by Wappalyzer
+            erp_categories = {"ERP", "ERP systems", "Enterprise resource planning"}
+            crm_categories = {"CRM", "CRM systems", "Customer relationship management",
+                              "Marketing automation"}
+
+            for tech_name, info in results.items():
+                tech_stack.append(tech_name)
+                categories = set(info.get("categories", []))
+
+                if not erp_system and categories & erp_categories:
+                    erp_system = tech_name
+                if not crm_system and categories & crm_categories:
+                    crm_system = tech_name
+
+            # Also check our own ERP/CRM keyword lists against detected tech names
+            if not erp_system:
+                for erp_name, keywords in self.ERP_KEYWORDS.items():
+                    for keyword in keywords:
+                        if any(keyword.lower() in t.lower() for t in tech_stack):
+                            erp_system = erp_name
+                            break
+                    if erp_system:
+                        break
+
+            if not crm_system:
+                for crm_name, keywords in self.CRM_KEYWORDS.items():
+                    for keyword in keywords:
+                        if any(keyword.lower() in t.lower() for t in tech_stack):
+                            crm_system = crm_name
+                            break
+                    if crm_system:
+                        break
+
+            return {
+                "tech_stack": tech_stack[:20],
+                "erp_system": erp_system,
+                "crm_system": crm_system,
+                "tech_source": "wappalyzer",
+            }
+
+        except Exception as e:
+            self.log.warning(
+                "wappalyzer_detect_failed",
+                provider="wappalyzer",
+                domain=domain,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+
+        return None
 
     async def _detect_builtwith(self, domain: str) -> dict | None:
         """Detect tech stack using BuiltWith API."""

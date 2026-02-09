@@ -117,12 +117,15 @@ enrichment:
       - clearbit
       - apollo
       - zoominfo
+      - sec_edgar
+      - website
     batch_size: 50
     skip_if_exists: true
 
   tech_stack:
     timeout: 300
     methods:
+      - wappalyzer
       - builtwith
       - website_fingerprint
       - job_postings
@@ -135,6 +138,8 @@ enrichment:
     providers:
       - apollo
       - zoominfo
+      - website
+      - hunter
     target_titles:
       - "CIO"
       - "VP IT"
@@ -204,9 +209,13 @@ validation:
       - email
     source_scores:
       clearbit: 95
+      sec_edgar: 95
       zoominfo: 90
       apollo: 85
       builtwith: 80
+      wappalyzer: 80
+      hunter: 75
+      schema_org: 75
       website: 70
       job_postings: 65
       association: 60
@@ -345,6 +354,9 @@ rate_limits:
   diecasting.org: 0.5
   afsinc.org: 0.5
   # External APIs
+  data.sec.gov: 10.0
+  efts.sec.gov: 10.0
+  api.hunter.io: 1.0
   linkedin.com: 0.2
   indeed.com: 0.3
   clearbit.com: 10.0

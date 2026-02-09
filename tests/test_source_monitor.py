@@ -17,37 +17,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from bs4 import BeautifulSoup
-from pydantic import Field
 
-# ---------------------------------------------------------------------------
-# Patch SourceBaseline to include the ``url_hash`` field.
-#
-# The production source_monitor.py code passes ``url_hash=...`` to the
-# SourceBaseline constructor and later reads ``baseline.url_hash``, but
-# the Pydantic model in models/ontology.py does not declare that field.
-# Pydantic V2 silently ignores unknown kwargs and then ``baseline.url_hash``
-# raises AttributeError.  We fix this for tests by creating a subclass
-# that adds the missing field and monkey-patching it into both modules.
-# ---------------------------------------------------------------------------
-import models.ontology as _ontology_module
 from middleware.secrets import _reset_secrets_manager
-
-
-class _PatchedSourceBaseline(_ontology_module.SourceBaseline):
-    """SourceBaseline with the ``url_hash`` field that source_monitor expects."""
-    url_hash: str = Field(default="")
-
-
-# Patch before importing source_monitor so its module-level import picks it up
-_ontology_module.SourceBaseline = _PatchedSourceBaseline  # type: ignore[misc]
-
-import agents.monitoring.source_monitor as _sm_module  # noqa: E402
-
-_sm_module.SourceBaseline = _PatchedSourceBaseline  # type: ignore[misc]
-
-# Re-export so tests can reference SourceBaseline from here
-SourceBaseline = _PatchedSourceBaseline
-
+from models.ontology import SourceBaseline  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -410,7 +382,6 @@ class TestCompareToBaseline:
 
     def _make_baseline(self, monitor, url, html):
         """Build a SourceBaseline-like object matching *html*."""
-        from models.ontology import SourceBaseline
 
         soup = BeautifulSoup(html, "lxml")
         structure_hash = monitor._hash_structure(soup)
@@ -450,7 +421,6 @@ class TestCompareToBaseline:
         original_html = '<html><body><div class="member-item">X</div></body></html>'
         soup = BeautifulSoup(original_html, "lxml")
 
-        from models.ontology import SourceBaseline
 
         baseline = SourceBaseline(
             url=url,
@@ -475,7 +445,6 @@ class TestCompareToBaseline:
         original_html = '<html><body><div class="member-item">A</div></body></html>'
         soup = BeautifulSoup(original_html, "lxml")
 
-        from models.ontology import SourceBaseline
 
         baseline = SourceBaseline(
             url=url,
@@ -499,7 +468,6 @@ class TestCompareToBaseline:
         url = "https://example.com/vanished"
         html_with_items = _member_directory_html(10)
 
-        from models.ontology import SourceBaseline
 
         soup = BeautifulSoup(html_with_items, "lxml")
         baseline = SourceBaseline(
@@ -831,7 +799,6 @@ class TestCalculateDrift:
     """Verify _calculate_drift placeholder returns 0.1."""
 
     def test_returns_placeholder_value(self, monitor):
-        from models.ontology import SourceBaseline
 
         html = _simple_html()
         soup = BeautifulSoup(html, "lxml")
@@ -848,7 +815,6 @@ class TestItemCountChanged:
     """Verify ITEM_COUNT_CHANGED alert when pct_diff > 0.5."""
 
     def test_significant_count_decrease_triggers_warning(self, monitor):
-        from models.ontology import SourceBaseline
 
         url = "https://example.com/shrink"
         html_100 = _member_directory_html(100)
@@ -869,7 +835,6 @@ class TestItemCountChanged:
         assert count_changed[0]["level"] == monitor.ALERT_WARNING
 
     def test_small_count_change_no_alert(self, monitor):
-        from models.ontology import SourceBaseline
 
         url = "https://example.com/stable"
         html_10 = _member_directory_html(10)

@@ -1442,3 +1442,353 @@ class TestContactFinderAgentProviderMerging:
 
         # Should deduplicate to 1 contact
         assert len(result["records"][0]["contacts"]) == 1
+
+
+# =============================================================================
+# TEST HUNTER.IO PROVIDER
+# =============================================================================
+
+
+class TestContactFinderAgentHunter:
+    """Tests for Hunter.io contact search and email verification."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_search_returns_contacts(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io domain search returns contacts."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "contact_finder": {
+                    "providers": ["hunter"]
+                }
+            }
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "emails": [
+                    {
+                        "value": "jsmith@acme.com",
+                        "first_name": "John",
+                        "last_name": "Smith",
+                        "position": "CIO",
+                        "phone_number": "+1-555-123-4567",
+                        "linkedin": "https://linkedin.com/in/jsmith"
+                    },
+                    {
+                        "value": "jane@acme.com",
+                        "first_name": "Jane",
+                        "last_name": "Doe",
+                        "position": "VP Operations"
+                    }
+                ]
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        records = [{"company_name": "Acme", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        contacts = result["records"][0]["contacts"]
+        assert len(contacts) == 2
+
+        # First contact
+        assert contacts[0]["name"] == "John Smith"
+        assert contacts[0]["title"] == "CIO"
+        assert contacts[0]["email"] == "jsmith@acme.com"
+        assert contacts[0]["phone"] == "+1-555-123-4567"
+        assert contacts[0]["linkedin_url"] == "https://linkedin.com/in/jsmith"
+        assert contacts[0]["source"] == "hunter"
+
+        # Second contact
+        assert contacts[1]["name"] == "Jane Doe"
+        assert contacts[1]["title"] == "VP Operations"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_no_api_key(
+        self, mock_limiter, mock_http, mock_logger, mock_config, no_api_keys
+    ):
+        """Hunter.io returns empty list without API key."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "contact_finder": {
+                    "providers": ["hunter"]
+                }
+            }
+        }
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        records = [{"company_name": "Acme", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        # No contacts found — no API key
+        assert result["contacts_found"] == 0
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_api_error(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io returns empty list on API error."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "contact_finder": {
+                    "providers": ["hunter"]
+                }
+            }
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 429  # Rate limited
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        records = [{"company_name": "Acme", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert result["contacts_found"] == 0
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_exception_handling(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io handles network exceptions gracefully."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "contact_finder": {
+                    "providers": ["hunter"]
+                }
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=Exception("Connection timeout")
+        )
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        records = [{"company_name": "Acme", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert result["contacts_found"] == 0
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_contacts_without_name(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io returns contacts even when name fields are empty."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "contact_finder": {
+                    "providers": ["hunter"]
+                }
+            }
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "emails": [
+                    {
+                        "value": "info@acme.com",
+                        "first_name": "",
+                        "last_name": "",
+                        "position": "CEO"
+                    }
+                ]
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        records = [{"company_name": "Acme", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        contacts = result["records"][0]["contacts"]
+        assert len(contacts) == 1
+        assert contacts[0]["email"] == "info@acme.com"
+        assert contacts[0]["source"] == "hunter"
+        assert "name" not in contacts[0]  # No name when both first/last are empty
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_verify_email_valid(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io email verification returns valid status."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"contact_finder": {}}
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "status": "valid",
+                "score": 95
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        result = await agent._verify_email_hunter("test@acme.com")
+
+        assert result is not None
+        assert result["email"] == "test@acme.com"
+        assert result["status"] == "valid"
+        assert result["score"] == 95
+        assert result["verified"] is True
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_verify_email_invalid(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io email verification returns invalid status."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"contact_finder": {}}
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "status": "invalid",
+                "score": 10
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        result = await agent._verify_email_hunter("fake@acme.com")
+
+        assert result is not None
+        assert result["verified"] is False
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_verify_no_api_key(
+        self, mock_limiter, mock_http, mock_logger, mock_config, no_api_keys
+    ):
+        """Hunter.io verify returns None without API key."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"contact_finder": {}}
+        }
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        result = await agent._verify_email_hunter("test@acme.com")
+        assert result is None
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_verify_api_error(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io verify returns None on API error."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"contact_finder": {}}
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        result = await agent._verify_email_hunter("test@acme.com")
+        assert result is None
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_hunter_verify_exception(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """Hunter.io verify handles exceptions gracefully."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"contact_finder": {}}
+        }
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=Exception("Network error")
+        )
+
+        from agents.enrichment.contact_finder import ContactFinderAgent
+
+        agent = ContactFinderAgent(agent_type="enrichment.contact_finder")
+
+        result = await agent._verify_email_hunter("test@acme.com")
+        assert result is None

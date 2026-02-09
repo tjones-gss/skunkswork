@@ -680,7 +680,7 @@ class OrchestratorAgent(BaseAgent):
             )
 
             if result.get("success"):
-                self.state.graph_edges = result.get("edges_created", 0)
+                self.state.graph_edges = result.get("edges", [])
 
         self.state.update_phase_progress(
             mined_company_ids=list(mined_company_ids),

@@ -1369,3 +1369,698 @@ class TestFirmographicAgentProviderFallback:
         assert mock_http.return_value.get.call_count == 1
         # Should not call apollo or zoominfo
         assert mock_http.return_value.post.call_count == 0
+
+
+# =============================================================================
+# TEST SEC EDGAR PROVIDER
+# =============================================================================
+
+
+class TestFirmographicAgentSecEdgar:
+    """Tests for SEC EDGAR firmographic provider."""
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_successful_lookup(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR returns firmographic data for public company."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        # Mock EDGAR search response
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_response.json.return_value = {
+            "hits": {
+                "hits": [{
+                    "_source": {
+                        "entity_name": "ACME CORP",
+                        "entity_id": "12345"
+                    }
+                }]
+            }
+        }
+
+        # Mock EDGAR submission response
+        mock_submission_response = MagicMock()
+        mock_submission_response.status_code = 200
+        mock_submission_response.json.return_value = {
+            "sic": "3599",
+            "sicDescription": "Industrial Machinery, NEC",
+            "stateOfIncorporation": "OH",
+            "fiscalYearEnd": "1231",
+            "addresses": {
+                "business": {
+                    "city": "CLEVELAND",
+                    "stateOrCountry": "OH"
+                }
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=[mock_search_response, mock_submission_response]
+        )
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        rec = result["records"][0]
+        assert rec["firmographic_source"] == "sec_edgar"
+        assert rec["sic_code"] == "3599"
+        assert rec["industry"] == "Industrial Machinery, NEC"
+        assert rec["city"] == "Cleveland"
+        assert rec["state"] == "OH"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_no_hits(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR returns None when no company found."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_response.json.return_value = {
+            "hits": {"hits": []}
+        }
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_search_response)
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Unknown Private LLC"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert "firmographic_source" not in result["records"][0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_search_api_error(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR returns None on search API error."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert "firmographic_source" not in result["records"][0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_submission_api_error(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR returns None when submission lookup fails."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_response.json.return_value = {
+            "hits": {
+                "hits": [{
+                    "_source": {
+                        "entity_name": "ACME CORP",
+                        "entity_id": "12345"
+                    }
+                }]
+            }
+        }
+
+        mock_sub_response = MagicMock()
+        mock_sub_response.status_code = 404
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=[mock_search_response, mock_sub_response]
+        )
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert "firmographic_source" not in result["records"][0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_no_entity_id(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR returns None when entity_id missing from hit."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_response.json.return_value = {
+            "hits": {
+                "hits": [{
+                    "_source": {
+                        "entity_name": "ACME CORP"
+                        # No entity_id
+                    }
+                }]
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_search_response)
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert "firmographic_source" not in result["records"][0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_exception_handling(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR handles exceptions gracefully."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=Exception("Network timeout")
+        )
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp"}]
+        result = await agent.run({"records": records})
+
+        assert result["success"] is True
+        assert "firmographic_source" not in result["records"][0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_cik_zero_padded(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR zero-pads CIK to 10 digits."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_response.json.return_value = {
+            "hits": {
+                "hits": [{
+                    "_source": {
+                        "entity_name": "ACME CORP",
+                        "entity_id": "789"
+                    }
+                }]
+            }
+        }
+
+        mock_sub_response = MagicMock()
+        mock_sub_response.status_code = 200
+        mock_sub_response.json.return_value = {
+            "sic": "3599",
+            "addresses": {"business": {}}
+        }
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=[mock_search_response, mock_sub_response]
+        )
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp"}]
+        await agent.run({"records": records})
+
+        # Second call should use zero-padded CIK
+        calls = mock_http.return_value.get.call_args_list
+        assert "CIK0000000789" in calls[1][0][0]
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_sec_edgar_partial_data(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """SEC EDGAR returns partial data when some fields are missing."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["sec_edgar"]
+                }
+            }
+        }
+
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_response.json.return_value = {
+            "hits": {
+                "hits": [{
+                    "_source": {
+                        "entity_name": "ACME CORP",
+                        "entity_id": "12345"
+                    }
+                }]
+            }
+        }
+
+        mock_sub_response = MagicMock()
+        mock_sub_response.status_code = 200
+        mock_sub_response.json.return_value = {
+            "sic": "3599",
+            # No sicDescription, no addresses
+            "addresses": {"business": {}}
+        }
+
+        mock_http.return_value.get = AsyncMock(
+            side_effect=[mock_search_response, mock_sub_response]
+        )
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme Corp"}]
+        result = await agent.run({"records": records})
+
+        rec = result["records"][0]
+        assert rec["firmographic_source"] == "sec_edgar"
+        assert rec["sic_code"] == "3599"
+        assert "industry" not in rec
+        assert "city" not in rec
+
+
+# =============================================================================
+# TEST SCHEMA.ORG EXTRACTION
+# =============================================================================
+
+
+class TestFirmographicAgentSchemaOrg:
+    """Tests for schema.org JSON-LD extraction."""
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_extracts_organization_with_employees(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts numberOfEmployees from Organization JSON-LD."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {
+            "@type": "Organization",
+            "name": "Acme Corp",
+            "numberOfEmployees": {"@type": "QuantitativeValue", "value": 250},
+            "foundingDate": "1985-03-15",
+            "address": {
+                "@type": "PostalAddress",
+                "addressLocality": "Cleveland",
+                "addressRegion": "OH"
+            }
+        }
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+
+        assert result is not None
+        assert result["employee_count_min"] == 250
+        assert result["employee_count_max"] == 250
+        assert result["year_founded"] == 1985
+        assert result["city"] == "Cleveland"
+        assert result["state"] == "OH"
+        assert result["firmographic_source"] == "schema_org"
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_extracts_corporation_type(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts data from Corporation @type (not just Organization)."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {"@type": "Corporation", "name": "Big Corp", "numberOfEmployees": 5000}
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+
+        assert result is not None
+        assert result["employee_count_min"] == 5000
+        assert result["firmographic_source"] == "schema_org"
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_handles_graph_array(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts from @graph array structure."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {
+            "@graph": [
+                {"@type": "WebSite", "name": "Acme"},
+                {"@type": "Organization", "numberOfEmployees": {"value": 100}, "foundingDate": "2001"}
+            ]
+        }
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+
+        assert result is not None
+        assert result["employee_count_min"] == 100
+        assert result["year_founded"] == 2001
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_handles_list_type(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Handles @type as list (e.g., ["Organization", "LocalBusiness"])."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {"@type": ["Organization", "LocalBusiness"], "numberOfEmployees": 50}
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+
+        assert result is not None
+        assert result["employee_count_min"] == 50
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_no_organization_in_jsonld(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Returns None when JSON-LD has no Organization type."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {"@type": "WebSite", "name": "Acme"}
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+        assert result is None
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_invalid_json_returns_none(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Returns None on invalid JSON in ld+json script."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {invalid json here
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+        assert result is None
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_no_jsonld_script(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Returns None when no JSON-LD script tag exists."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = "<html><head></head><body>No structured data</body></html>"
+
+        result = agent._extract_schema_org(html)
+        assert result is None
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_founding_date_validation(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Rejects founding dates outside valid range."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        {"@type": "Organization", "foundingDate": "1200-01-01"}
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+        # 1200 is before 1800, so it should be rejected — and since no other data, returns None
+        assert result is None
+
+    @pytest.mark.asyncio
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    async def test_schema_org_used_in_scrape_website(
+        self, mock_limiter, mock_http, mock_logger, mock_config, mock_api_keys
+    ):
+        """_scrape_website tries schema.org before regex parsing."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {
+                "firmographic": {
+                    "providers": ["website"]
+                }
+            }
+        }
+
+        schema_html = """
+        <html><head>
+        <script type="application/ld+json">
+        {"@type": "Organization", "numberOfEmployees": 75, "foundingDate": "1999"}
+        </script>
+        </head><body><p>Founded in 2005 with 200 employees</p></body></html>
+        """
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = schema_html
+
+        mock_http.return_value.get = AsyncMock(return_value=mock_response)
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        records = [{"company_name": "Acme", "website": "https://acme.com"}]
+        result = await agent.run({"records": records})
+
+        rec = result["records"][0]
+        # Should use schema.org data (75 employees) not regex data (200 employees)
+        assert rec["employee_count_min"] == 75
+        assert rec["year_founded"] == 1999
+        assert rec["firmographic_source"] == "schema_org"
+
+    @patch("agents.base.Config")
+    @patch("agents.base.StructuredLogger")
+    @patch("agents.base.AsyncHTTPClient")
+    @patch("agents.base.RateLimiter")
+    def test_extracts_from_ld_json_list(
+        self, mock_limiter, mock_http, mock_logger, mock_config
+    ):
+        """Extracts from JSON-LD when root is a list."""
+        mock_config.return_value.load.return_value = {
+            "enrichment": {"firmographic": {}}
+        }
+
+        from agents.enrichment.firmographic import FirmographicAgent
+
+        agent = FirmographicAgent(agent_type="enrichment.firmographic")
+
+        html = """
+        <html><head>
+        <script type="application/ld+json">
+        [
+            {"@type": "WebSite", "name": "Acme"},
+            {"@type": "Organization", "numberOfEmployees": 300}
+        ]
+        </script>
+        </head><body></body></html>
+        """
+
+        result = agent._extract_schema_org(html)
+
+        assert result is not None
+        assert result["employee_count_min"] == 300

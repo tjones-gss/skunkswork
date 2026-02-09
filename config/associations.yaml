@@ -99,3 +99,31 @@ associations:
     expected_members: 500
     priority: "medium"
     schema: "afs"
+
+  FMA:
+    name: "Fabricators & Manufacturers Association"
+    url: "https://fmanet.org"
+    directory_url: "https://fmanet.org/membership/member-directory"
+    expected_members: 200
+    priority: "low"
+
+  AMT:
+    name: "Association for Manufacturing Technology"
+    url: "https://amtonline.org"
+    directory_url: "https://amtonline.org/membership/member-directory"
+    expected_members: 400
+    priority: "low"
+
+  PMMI:
+    name: "Association for Packaging and Processing Technologies"
+    url: "https://pmmi.org"
+    directory_url: "https://pmmi.org/membership/directory"
+    expected_members: 900
+    priority: "low"
+
+  PLASTICS:
+    name: "Plastics Industry Association"
+    url: "https://plasticsindustry.org"
+    directory_url: "https://plasticsindustry.org/membership/directory"
+    expected_members: 1000
+    priority: "low"

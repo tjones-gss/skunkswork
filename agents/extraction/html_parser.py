@@ -312,6 +312,15 @@ class DirectoryParserAgent(HTMLParserAgent):
     rather than individual profile pages.
     """
 
+    # Stealth init script to hide automation signals from anti-bot detectors.
+    _STEALTH_SCRIPT = """
+        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5],
+        });
+        window.chrome = { runtime: {} };
+    """
+
     async def _fetch_with_playwright(self, url: str) -> str | None:
         """Fetch page using Playwright browser when httpx is blocked by WAF."""
         try:
@@ -321,15 +330,24 @@ class DirectoryParserAgent(HTMLParserAgent):
             return None
 
         try:
+            from skills.common.SKILL import AsyncHTTPClient
+
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page(
-                    user_agent=(
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    )
+                browser = await p.chromium.launch(
+                    headless=False,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--window-size=1920,1080",
+                    ],
                 )
+                context = await browser.new_context(
+                    user_agent=AsyncHTTPClient._random_ua(),
+                    viewport={"width": 1920, "height": 1080},
+                    locale="en-US",
+                )
+                page = await context.new_page()
+                await page.add_init_script(self._STEALTH_SCRIPT)
+
                 response = await page.goto(url, wait_until="networkidle", timeout=30000)
                 if response and response.status == 200:
                     html = await page.content()

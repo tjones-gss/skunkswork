@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 # =============================================================================
 # ENUMERATIONS
@@ -130,7 +130,11 @@ class Provenance(BaseModel):
     page_type: PageType | None = Field(default=None, description="Classified page type")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Extraction confidence")
 
-    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
+    model_config = ConfigDict()
+
+    @field_serializer('extracted_at')
+    def serialize_extracted_at(self, v: datetime) -> str:
+        return v.isoformat()
 
 
 class Contact(BaseModel):
@@ -421,6 +425,7 @@ class SourceBaseline(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     url: str
     domain: str
+    url_hash: str = Field(default="")
 
     # DOM structure
     selector_hashes: dict[str, str] = Field(default_factory=dict)

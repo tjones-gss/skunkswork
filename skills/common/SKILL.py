@@ -98,7 +98,7 @@ class RateLimiter:
         return self.RATE_LIMITS["default"]
 
     async def acquire(self, domain: str):
-        """Wait for rate limit and acquire slot."""
+        """Wait for rate limit with human-like jitter and acquire slot."""
         async with self._lock:
             rate = self.get_rate(domain)
             min_interval = 1.0 / rate
@@ -107,7 +107,10 @@ class RateLimiter:
             elapsed = time.time() - last
 
             if elapsed < min_interval:
-                wait_time = min_interval - elapsed
+                base_wait = min_interval - elapsed
+                # Add random jitter (0.3–1.5s) to break fixed-interval patterns
+                jitter = random.uniform(0.3, 1.5)
+                wait_time = base_wait + jitter
                 await asyncio.sleep(wait_time)
 
             self.last_request[domain] = time.time()
@@ -261,12 +264,17 @@ class AsyncHTTPClient:
     MAX_BACKOFF = 60
     RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 
-    # Use a browser-like UA to avoid WAF blocks on association websites.
-    # The bot identifier is included as a secondary token per convention.
-    USER_AGENT = (
+    # Rotate through real Chrome user-agent strings to avoid fingerprinting.
+    USER_AGENTS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NAM-IntelBot/1.0"
-    )
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    ]
 
     def __init__(
         self,
@@ -277,12 +285,33 @@ class AsyncHTTPClient:
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
         self._client: httpx.AsyncClient | None = None
 
+    @classmethod
+    def _random_ua(cls) -> str:
+        """Return a random user-agent string from the rotation pool."""
+        return random.choice(cls.USER_AGENTS)
+
+    # Default browser-like headers sent with every request.
+    _BROWSER_HEADERS = {
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
+        """Get or create HTTP client with browser-like defaults."""
         if self._client is None or self._client.is_closed:
+            headers = {
+                "User-Agent": self._random_ua(),
+                **self._BROWSER_HEADERS,
+            }
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.DEFAULT_TIMEOUT),
-                headers={"User-Agent": self.USER_AGENT},
+                headers=headers,
                 follow_redirects=True,
             )
         return self._client

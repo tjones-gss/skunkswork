@@ -8,6 +8,7 @@ All agents inherit from this base class.
 import asyncio
 import json
 import os
+import random
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
@@ -392,6 +393,68 @@ class BaseAgent(ABC):
         except (json.JSONDecodeError, OSError) as e:
             self.log.warning(f"Failed to load checkpoint: {e}")
             return None
+
+    # ------------------------------------------------------------------
+    # Human-mimicry Playwright helpers (P2 anti-bot)
+    # ------------------------------------------------------------------
+
+    # Stealth init script to hide automation signals from anti-bot detectors.
+    _STEALTH_SCRIPT = """
+        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5],
+        });
+        window.chrome = { runtime: {} };
+    """
+
+    async def _human_browse(self, page, url: str) -> str:
+        """Navigate to *url* with human-like scrolling and dwell time.
+
+        Args:
+            page: A Playwright ``Page`` object (already opened).
+            url: Target URL to load.
+
+        Returns:
+            The full page HTML after interaction.
+        """
+        await page.goto(url, wait_until="domcontentloaded")
+
+        # Random scroll to ~30% then ~70% of the page (mimics reading)
+        await page.evaluate(
+            "window.scrollTo(0, document.body.scrollHeight * 0.3)"
+        )
+        await asyncio.sleep(random.uniform(0.5, 1.5))
+
+        await page.evaluate(
+            "window.scrollTo(0, document.body.scrollHeight * 0.7)"
+        )
+        await asyncio.sleep(random.uniform(0.3, 1.0))
+
+        # Wait for dynamic content to finish loading
+        await page.wait_for_load_state("networkidle")
+
+        return await page.content()
+
+    async def _visit_with_referrer(self, page, homepage: str, target: str) -> str:
+        """Visit *homepage* first, pause, then navigate to *target*.
+
+        Simulates natural referrer-chain browsing (homepage -> directory)
+        rather than directly jumping to an internal page.
+
+        Args:
+            page: A Playwright ``Page`` object.
+            homepage: The site's main page (e.g. ``https://agma.org``).
+            target: The actual page to scrape.
+
+        Returns:
+            The full page HTML of *target* after interaction.
+        """
+        # Land on homepage
+        await page.goto(homepage, wait_until="domcontentloaded")
+        await asyncio.sleep(random.uniform(1.0, 3.0))
+
+        # Navigate to target (browser sends homepage as Referer automatically)
+        return await self._human_browse(page, target)
 
 
 class DeadLetterQueue:

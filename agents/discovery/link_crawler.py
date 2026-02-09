@@ -6,6 +6,7 @@ Crawls member directory pages following pagination to discover all member URLs.
 """
 
 import json
+import random
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -336,8 +337,37 @@ class LinkCrawlerAgent(BaseAgent):
         url_lower = url.lower()
         return any(re.search(p, url_lower) for p in skip_patterns)
 
+    # Stealth init script to hide automation signals from anti-bot detectors.
+    _STEALTH_SCRIPT = """
+        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5],
+        });
+        window.chrome = { runtime: {} };
+    """
+
+    async def _launch_stealth_browser(self, playwright):
+        """Launch a Playwright browser with anti-detection settings."""
+        from skills.common.SKILL import AsyncHTTPClient
+
+        browser = await playwright.chromium.launch(
+            headless=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--window-size=1920,1080",
+            ],
+        )
+        context = await browser.new_context(
+            user_agent=AsyncHTTPClient._random_ua(),
+            viewport={"width": 1920, "height": 1080},
+            locale="en-US",
+        )
+        page = await context.new_page()
+        await page.add_init_script(self._STEALTH_SCRIPT)
+        return browser, page
+
     async def _crawl_infinite_scroll(self, url: str) -> set:
-        """Crawl infinite scroll page using Playwright."""
+        """Crawl infinite scroll page using Playwright with stealth."""
         try:
             from playwright.async_api import async_playwright
         except ImportError:
@@ -349,8 +379,7 @@ class LinkCrawlerAgent(BaseAgent):
 
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
+                browser, page = await self._launch_stealth_browser(p)
 
                 await page.goto(url, wait_until="networkidle")
 
@@ -380,9 +409,9 @@ class LinkCrawlerAgent(BaseAgent):
 
                     prev_count = len(member_urls)
 
-                    # Scroll down
+                    # Scroll down with human-like random pause
                     await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                    await page.wait_for_timeout(1500)
+                    await page.wait_for_timeout(int(random.uniform(1000, 2500)))
 
                 await browser.close()
 
@@ -392,7 +421,7 @@ class LinkCrawlerAgent(BaseAgent):
         return member_urls
 
     async def _crawl_load_more(self, url: str) -> set:
-        """Crawl page with Load More button using Playwright."""
+        """Crawl page with Load More button using Playwright with stealth."""
         try:
             from playwright.async_api import async_playwright
         except ImportError:
@@ -404,8 +433,7 @@ class LinkCrawlerAgent(BaseAgent):
 
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
+                browser, page = await self._launch_stealth_browser(p)
 
                 await page.goto(url, wait_until="networkidle")
 
@@ -434,7 +462,9 @@ class LinkCrawlerAgent(BaseAgent):
 
                         if load_more:
                             await load_more.click()
-                            await page.wait_for_timeout(2000)
+                            await page.wait_for_timeout(
+                                int(random.uniform(1500, 3000))
+                            )
                         else:
                             break
 

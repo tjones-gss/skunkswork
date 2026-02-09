@@ -26,14 +26,16 @@ DATA_EXPORTS = PROJECT_ROOT / "data" / "exports"
 # Source file registry (checked for existence at load time)
 # ---------------------------------------------------------------------------
 COMPANY_SOURCES = [
-    # PMA: prefer enriched if agent 1 produced it, else raw smoke test
+    # enriched_all.jsonl is the master enriched file (NEMA + AGMA + PMA)
+    # Load it first — it supersedes per-association files for those 3
+    ("_MULTI", DATA_PROCESSED / "enriched_all.jsonl"),
+    # PMA fallback: if not in enriched_all, use scraped profiles or raw
     ("PMA", DATA_RAW / "PMA" / "records_enriched.jsonl"),
     ("PMA", DATA_RAW / "PMA" / "records_smoke_test.jsonl"),
-    # NEMA enriched (agent 2 output or standalone)
-    ("NEMA", DATA_PROCESSED / "enriched_all.jsonl"),
+    # NEMA fallback
     ("NEMA", DATA_PROCESSED / "NEMA" / "enriched.jsonl"),
     ("NEMA", DATA_RAW / "NEMA" / "records_00280a42.jsonl"),
-    # AGMA live + seed
+    # AGMA fallback
     ("AGMA", DATA_RAW / "AGMA" / "records_live.jsonl"),
     ("AGMA", DATA_RAW / "AGMA" / "records.jsonl"),
     # SOCMA and AIA seeds
@@ -134,13 +136,8 @@ def load_all_records() -> tuple[list[dict], dict[str, int]]:
     for assoc, path in COMPANY_SOURCES:
         if not path.exists():
             continue
-        # For PMA and NEMA, only load the best available file (first match)
-        # For AGMA, load both seed + live since they may have different companies
-        if assoc in ("PMA", "NEMA") and assoc in loaded_assocs:
-            continue
-        # If enriched_all.jsonl exists, skip per-association enriched files
-        if "enriched_all" in path.name and path.exists():
-            # enriched_all has NEMA + AGMA enriched data
+        # _MULTI = enriched_all.jsonl (contains NEMA + AGMA + PMA enriched)
+        if assoc == "_MULTI":
             records = load_jsonl(path)
             if records:
                 all_records.extend(records)
@@ -149,7 +146,10 @@ def load_all_records() -> tuple[list[dict], dict[str, int]]:
                     source_counts[a] = source_counts.get(a, 0) + 1
                     loaded_assocs.add(a)
                 print(f"  Loaded {len(records):>5} records from {path.name} (multi-assoc)")
-                continue
+            continue
+        # For PMA, NEMA, AGMA: skip if already loaded from enriched_all
+        if assoc in loaded_assocs:
+            continue
 
         records = load_jsonl(path)
         if records:

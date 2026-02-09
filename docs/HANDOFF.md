@@ -4,7 +4,48 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-09 (Session 23) — Commit Backlog + Free OSINT Enrichment (MX/SPF/Email)
+## Latest Session: 2026-02-09 (Session 24) — PMA Profile Scraping (1,064 Companies) + Full Pipeline Enrichment
+
+### Session Summary
+Scraped all 1,064 PMA member profiles via MCP Playwright (100% success rate, zero Cloudflare blocks). Extracted websites, phone numbers, contacts with emails, manufacturing processes, certifications, and more. Then ran full enrichment pipeline across all 1,797 records (NEMA+AGMA+PMA) adding tech stack detection, MX records, SPF analysis, and email patterns. Updated quality pipeline to avoid double-counting from enriched_all.jsonl.
+
+### Completed This Session
+1. **PMA Profile Scraping** — Scraped all 1,064 PMA member profile pages via MCP Playwright browser using in-browser JS extraction. Chunked into 6 mega-batches of 200 profiles. Used localStorage for cross-navigation persistence and Blob download API to extract data. 100% success rate (0 errors across all 1,064 requests)
+2. **PMA Data Merge** — Merged scraped profile data with original records into `records_enriched.jsonl`. 906 websites (85%), 1,060 phones (100%), 1,051 with contacts (99%), 1,420 total emails
+3. **Full Enrichment Run** — Ran `enrich_batch.py` on all 1,797 records (300 NEMA + 433 AGMA + 1,064 PMA). Enrichment adds: tech stack (168 HTML fingerprints), HTTP header analysis, CMS detection, schema.org, contact/team page detection, MX records, SPF services, email pattern guessing
+4. **Encoding Fixes** — Fixed UTF-8 encoding in `enrich_batch.py` (Windows cp1252 default caused UnicodeDecodeError on PMA company descriptions)
+5. **Quality Pipeline Update** — Updated `quality_pipeline.py` to use `enriched_all.jsonl` as primary source (avoids double-counting PMA records)
+
+### PMA Scraping Results
+| Metric | Count | % |
+|--------|-------|---|
+| Profiles scraped | 1,064 | 100% |
+| With website | 906 | 85.2% |
+| With phone | 1,060 | 99.6% |
+| With contacts | 1,051 | 98.8% |
+| Total emails found | 1,420 | — |
+| Errors | 0 | 0% |
+
+### Files Modified
+- `scripts/enrich_batch.py` — UTF-8 encoding fixes for Windows compatibility
+- `scripts/quality_pipeline.py` — Updated source loading to prefer enriched_all.jsonl, avoid double-counting
+
+### Files Created
+- `scripts/scrape_pma_mcp_batch.py` — MCP Playwright batch management (prepare/merge/status)
+- `scripts/pma_mcp_driver.py` — Driver for MCP batch processing
+- `data/raw/PMA/records_enriched.jsonl` — 1,064 PMA profiles with scraped data
+- `data/raw/PMA/mcp_batches/` — 43 batch files + 6 mega batch files
+
+### Key Decisions
+- MCP Playwright (real Chromium) is the only approach that bypasses Cloudflare on pma.org — httpx, local Playwright (headed and headless), and cookie-exported httpx all fail
+- localStorage used for cross-navigation persistence across batch runs
+- Blob download API used to extract data from browser to disk (direct return exceeded token limits)
+- 1s delay between profile requests proved safe (zero rate limiting across 1,064 requests)
+- `page.waitForTimeout()` required instead of `setTimeout()` (MCP Playwright sandbox limitation)
+
+---
+
+## 2026-02-09 (Session 23) — Commit Backlog + Free OSINT Enrichment (MX/SPF/Email)
 
 ### Session Summary
 Committed all outstanding work from sessions 20-22 (2 logical commits: code+tests and scripts). Enhanced `enrich_batch.py` with three free OSINT enrichment methods — MX record lookup (email provider detection), SPF/TXT record analysis (marketing/CRM service detection), and email pattern guessing. Ran full enrichment on 486 NEMA+AGMA records. Re-ran quality pipeline with 2,116 unique companies across 5 associations.

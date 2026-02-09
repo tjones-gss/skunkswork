@@ -630,7 +630,7 @@ def load_records() -> list[dict]:
 
     # Load NEMA enriched records
     if NEMA_ENRICHED.exists():
-        with open(NEMA_ENRICHED) as f:
+        with open(NEMA_ENRICHED, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -641,7 +641,7 @@ def load_records() -> list[dict]:
 
     # Load AGMA records
     if AGMA_RECORDS.exists():
-        with open(AGMA_RECORDS) as f:
+        with open(AGMA_RECORDS, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -653,7 +653,7 @@ def load_records() -> list[dict]:
 
     # Load PMA enriched records (from scrape_pma_batch.py output)
     if PMA_ENRICHED.exists():
-        with open(PMA_ENRICHED) as f:
+        with open(PMA_ENRICHED, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -761,9 +761,9 @@ async def main():
 
     # Write output
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, "w") as f:
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         for record in all_output:
-            f.write(json.dumps(record) + "\n")
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     elapsed = time.time() - start_time
 
@@ -773,9 +773,9 @@ async def main():
     nema_pending = [r for r in no_domain if r.get("association") == "NEMA"]
     if nema_enriched_records or nema_pending:
         nema_all = nema_enriched_records + nema_pending
-        with open(NEMA_ENRICHED, "w") as f:
+        with open(NEMA_ENRICHED, "w", encoding="utf-8") as f:
             for record in nema_all:
-                f.write(json.dumps(record) + "\n")
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
         print(f"\nUpdated {NEMA_ENRICHED.name}: {len(nema_enriched_records)} enriched, {len(nema_pending)} pending")
 
     # Summary stats

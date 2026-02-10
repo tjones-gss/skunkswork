@@ -4,7 +4,53 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-09 (Session 24) — PMA Profile Scraping (1,064 Companies) + Full Pipeline Enrichment
+## Latest Session: 2026-02-10 (Session 25) — Full Enrichment Pipeline Run (1,797 Records)
+
+### Session Summary
+Hardened `enrich_batch.py` with crash protection, resume support, and bare-domain DNS fixes, then ran full enrichment pipeline across all 1,797 records (NEMA+AGMA+PMA). Achieved 89% MX coverage, 91% tech stack, 66% SPF services. Quality pipeline re-run produced 2,083 unique companies with avg score 72.5 (up from 62.8).
+
+### Completed This Session
+1. **Bare Domain DNS Fix** — Added `_bare_domain()` to strip subdomains for DNS lookups (MX/SPF records live at registrable domain, e.g. `www.3m.com` → `3m.com`). This fixed ~40% of DNS lookups that were failing silently.
+2. **Crash Protection** — Added URL validation (reject semicolons/spaces), try/except around `enrich_record()`, and checkpoint saves every 100 records. Previous run crashed at record 498 due to malformed URL `https;`.
+3. **Resume Support** — Added `--resume` flag that reads checkpoint file and skips already-enriched records.
+4. **Two-Phase Enrichment** — Phase 1: DNS-only (0.1s delay) for 247 records already having tech data. Phase 2: Full HTTP+DNS (1s delay) for 1,390 new records.
+5. **Full Enrichment Run** — 119 minutes, 1,597/1,637 completed (97.5% success). Only 41 errors (14 timeouts, 13 CF 403s).
+6. **Quality Pipeline Re-run** — 2,083 unique companies (119 duplicates merged), avg quality score 72.5.
+
+### Enrichment Results
+| Metric | Count | % |
+|--------|-------|---|
+| Records processed | 1,637 | — |
+| Completed | 1,597 | 97.5% |
+| Tech stack detected | 1,453 | 91.0% |
+| MX / email provider | 1,423 | 89.1% |
+| SPF services | 1,060 | 66.4% |
+| CMS detected | 678 | 42.5% |
+| Contact page found | 419 | 26.2% |
+| Schema.org JSON-LD | 190 | 11.9% |
+
+### Quality Improvement
+| Metric | Before (S23) | After (S25) | Change |
+|--------|-------------|-------------|--------|
+| Website coverage | 34% | **75.1%** | +41pp |
+| Tech stack | 0.6% | **67.6%** | +67pp |
+| Email provider | 0% | **65.3%** | +65pp |
+| SPF services | 0% | **49.4%** | +49pp |
+| Avg quality score | 62.8 | **72.5** | +9.7 |
+| High-quality (B+) | ~350 | **787** | +437 |
+
+### Files Modified
+- `scripts/enrich_batch.py` — Bare domain DNS, resume, crash protection, checkpoint saves, two-phase enrichment
+
+### Key Decisions
+- Use `_bare_domain()` that strips ALL subdomains (keeping last 2 parts) rather than just `www.` — handles `buildings.honeywell.com`, `new.abb.com`, etc.
+- Mark records as "complete" when DNS succeeds even if HTTP returns 403 — preserves MX/SPF data
+- Skip contact/team page HEAD requests for records that already have contacts (saves 4-10 requests/record)
+- Rate limit reduced from 2s to 1s — no rate limiting observed across 1,390 requests
+
+---
+
+## 2026-02-09 (Session 24) — PMA Profile Scraping (1,064 Companies) + Full Pipeline Enrichment
 
 ### Session Summary
 Scraped all 1,064 PMA member profiles via MCP Playwright (100% success rate, zero Cloudflare blocks). Extracted websites, phone numbers, contacts with emails, manufacturing processes, certifications, and more. Then ran full enrichment pipeline across all 1,797 records (NEMA+AGMA+PMA) adding tech stack detection, MX records, SPF analysis, and email patterns. Updated quality pipeline to avoid double-counting from enriched_all.jsonl.

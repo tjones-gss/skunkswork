@@ -4,7 +4,38 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
-## Latest Session: 2026-02-10 (Session 25) — Full Enrichment Pipeline Run (1,797 Records)
+## Latest Session: 2026-02-10 (Session 26) — Marketing Deliverables Sprint
+
+### Session Summary
+4-agent parallel team sprint producing 6 marketing-ready deliverables from the pipeline's 2,083 companies and 1,797 enriched records. Rewrote export_excel.py and created 3 new scripts (export_segments.py, export_intelligence.py, generate_exec_summary.py).
+
+### Completed This Session
+1. **GSS_NAM_Intelligence_Master.xlsx** — 7-sheet workbook: All Companies (2,096 rows), High-Quality Targets (787), Salesforce Import (787 mapped to SFDC fields), By Association (5), By State (44), Decision-Maker Contacts (1,331), Data Quality Report
+2. **GSS_Salesforce_Import.csv** — 712 B-grade records with __c custom fields, 0 duplicate Account Names, ready for SFDC Data Import Wizard
+3. **GSS_Segmented_Lists.xlsx** — 7 market segments: Microsoft 365 Stack (627), Legacy Email (1,037), Small Manufacturers (457), PMA Premium Members (343), Marketing Automation Users (126), Salesforce Users (124), Large Manufacturers (3)
+4. **GSS_Tech_Intelligence.xlsx** — 4 sheets: Email Provider Summary, CMS Distribution, Marketing Tools (SPF), Top Technologies
+5. **GSS_Event_Strategy.xlsx** — 3 sheets: Events Calendar (20 events), Competitor Landscape (15 competitors), Recommended Actions
+6. **GSS_Executive_Summary.md** — 264-line stakeholder-ready summary with all pipeline stats computed dynamically
+
+### Files Modified
+- `scripts/export_excel.py` — Rewrote: added enrichment columns, 7 sheets, SFDC import, data merge from enriched_all.jsonl + companies_all.csv
+- `scripts/export_segments.py` — NEW: 7 marketing segments based on tech/infrastructure signals
+- `scripts/export_intelligence.py` — NEW: Tech Intelligence + Event Strategy workbooks
+- `scripts/generate_exec_summary.py` — NEW: Dynamic executive summary generator
+
+### Key Decisions
+- Used 4-agent parallel team (excel-master, segment-builder, intel-reporter, exec-summary) for speed
+- Merged data from enriched_all.jsonl (rich fields) + companies_all.csv (quality scores) on company_name
+- B grade is highest available (no A grades) — 787 records qualify as "high quality"
+- Companies can appear in multiple segments (intentional — same company may be MS365 user AND PMA Premium)
+- SFDC import deduped by Account Name, kept highest quality_score
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (281s)
+
+---
+
+## Session: 2026-02-10 (Session 25) — Full Enrichment Pipeline Run (1,797 Records)
 
 ### Session Summary
 Hardened `enrich_batch.py` with crash protection, resume support, and bare-domain DNS fixes, then ran full enrichment pipeline across all 1,797 records (NEMA+AGMA+PMA). Achieved 89% MX coverage, 91% tech stack, 66% SPF services. Quality pipeline re-run produced 2,083 unique companies with avg score 72.5 (up from 62.8).

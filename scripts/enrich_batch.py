@@ -49,7 +49,7 @@ USER_AGENT = (
     "Chrome/131.0.0.0 Safari/537.36"
 )
 
-RATE_LIMIT_DELAY = 2  # seconds between domains
+RATE_LIMIT_DELAY = 1  # seconds between domains
 
 TECH_FINGERPRINTS = {
     # Analytics
@@ -261,6 +261,19 @@ EMAIL_PATTERNS = [
 DNS_TIMEOUT = 5  # seconds for DNS queries
 
 
+def _bare_domain(domain: str) -> str:
+    """Strip subdomains for DNS lookups, keeping the registrable domain.
+
+    Examples: www.3m.com -> 3m.com, buildings.honeywell.com -> honeywell.com,
+    new.abb.com -> abb.com, medimg.agfa.com -> agfa.com
+    """
+    parts = domain.lower().split(".")
+    # Keep at least 2 parts (e.g. example.com)
+    while len(parts) > 2:
+        parts = parts[1:]
+    return ".".join(parts)
+
+
 def lookup_mx_records(domain: str) -> tuple[list[str], str | None]:
     """Look up MX records for a domain and identify the email provider.
 
@@ -268,6 +281,7 @@ def lookup_mx_records(domain: str) -> tuple[list[str], str | None]:
     """
     mx_records = []
     provider = None
+    domain = _bare_domain(domain)
 
     try:
         resolver = dns.resolver.Resolver()
@@ -311,6 +325,7 @@ def lookup_spf_services(domain: str) -> list[str]:
     """
     services = []
     txt_records = []
+    domain = _bare_domain(domain)
 
     try:
         resolver = dns.resolver.Resolver()
@@ -526,12 +541,16 @@ async def check_page_exists(client: httpx.AsyncClient, base_url: str, path: str)
         return False
 
 
-async def enrich_record(client: httpx.AsyncClient, record: dict) -> dict:
-    """Enrich a single record with website data."""
+async def enrich_record(client: httpx.AsyncClient, record: dict,
+                        skip_http: bool = False) -> dict:
+    """Enrich a single record with website data and DNS records.
+
+    If skip_http=True, only performs DNS-based enrichment (MX, SPF, email patterns).
+    This avoids 403 errors from Cloudflare-protected sites.
+    """
     enriched = dict(record)
     domain = record.get("domain", "")
     website = record.get("website", "")
-    company = record.get("company_name", "unknown")
 
     if not domain:
         enriched["enrichment_status"] = "skipped_no_domain"
@@ -541,48 +560,59 @@ async def enrich_record(client: httpx.AsyncClient, record: dict) -> dict:
     if not website:
         website = f"https://{domain}"
 
-    tech_stack = []
-    cms = None
-    schema_org = None
-    has_contact_page = False
-    has_team_page = False
+    tech_stack = list(record.get("tech_stack", []))
+    cms = record.get("cms")
+    schema_org = record.get("schema_org")
+    has_contact_page = record.get("has_contact_page", False)
+    has_team_page = record.get("has_team_page", False)
     errors = []
+    http_ok = False
 
-    # Fetch homepage
-    try:
-        resp = await client.get(website, follow_redirects=True, timeout=10)
-        html = resp.text
-        status = resp.status_code
+    # Validate website URL
+    if not website.startswith(("http://", "https://")):
+        website = f"https://{domain}"
+    # Reject clearly malformed URLs
+    if ";" in website or " " in website or not domain:
+        errors.append("invalid_url")
+        website = ""
 
-        if status == 200 and html:
-            tech_stack = detect_tech_from_html(html)
-            header_techs = detect_tech_from_headers(dict(resp.headers))
-            for t in header_techs:
-                if t not in tech_stack:
-                    tech_stack.append(t)
-            tech_stack.sort()
-            cms = detect_cms_from_generator(html)
-            schema_org = extract_schema_org(html)
-        else:
-            errors.append(f"homepage_status_{status}")
-    except httpx.RequestError as e:
-        err_type = type(e).__name__
-        errors.append(f"homepage_{err_type}")
+    # Fetch homepage (unless skip_http or already have tech data)
+    if not skip_http and website:
+        try:
+            resp = await client.get(website, follow_redirects=True, timeout=8)
+            html = resp.text
+            status = resp.status_code
 
-    # Check contact and team pages
-    base_url = f"https://{domain}"
+            if status == 200 and html:
+                http_ok = True
+                new_tech = detect_tech_from_html(html)
+                header_techs = detect_tech_from_headers(dict(resp.headers))
+                for t in new_tech + header_techs:
+                    if t not in tech_stack:
+                        tech_stack.append(t)
+                tech_stack.sort()
+                cms = cms or detect_cms_from_generator(html)
+                schema_org = schema_org or extract_schema_org(html)
+            else:
+                errors.append(f"homepage_status_{status}")
+        except httpx.RequestError as e:
+            err_type = type(e).__name__
+            errors.append(f"homepage_{err_type}")
 
-    for path in CONTACT_PATHS:
-        if await check_page_exists(client, base_url, path):
-            has_contact_page = True
-            break
+        # Check contact and team pages (only if HTTP worked AND we don't
+        # already have contact info — avoids 4-10 extra HEAD requests per record)
+        if http_ok and not record.get("contacts"):
+            base_url = f"https://{domain}"
+            for path in CONTACT_PATHS:
+                if await check_page_exists(client, base_url, path):
+                    has_contact_page = True
+                    break
+            for path in TEAM_PATHS:
+                if await check_page_exists(client, base_url, path):
+                    has_team_page = True
+                    break
 
-    for path in TEAM_PATHS:
-        if await check_page_exists(client, base_url, path):
-            has_team_page = True
-            break
-
-    # MX record lookup (email provider detection)
+    # MX record lookup (email provider detection) — always runs
     mx_records, email_provider = lookup_mx_records(domain)
     if mx_records:
         enriched["mx_records"] = mx_records
@@ -592,11 +622,10 @@ async def enrich_record(client: httpx.AsyncClient, record: dict) -> dict:
     else:
         enriched["has_mx"] = False
 
-    # SPF/TXT record analysis (marketing/CRM service detection)
+    # SPF/TXT record analysis — always runs
     spf_services = lookup_spf_services(domain)
     if spf_services:
         enriched["spf_services"] = spf_services
-        # Merge SPF-detected services into tech_stack
         for svc in spf_services:
             if svc not in tech_stack:
                 tech_stack.append(svc)
@@ -617,8 +646,16 @@ async def enrich_record(client: httpx.AsyncClient, record: dict) -> dict:
     enriched["has_team_page"] = has_team_page
     enriched["enriched_at"] = datetime.now(timezone.utc).isoformat()
     enriched["enrichment_source"] = "website_scrape"
-    enriched["enrichment_status"] = "complete" if not errors else "error"
-    if errors:
+
+    # Status: complete if HTTP worked or if DNS enrichment succeeded
+    dns_ok = bool(mx_records or spf_services)
+    if http_ok or (not errors):
+        enriched["enrichment_status"] = "complete"
+    elif dns_ok:
+        enriched["enrichment_status"] = "complete"
+        enriched["enrichment_errors"] = errors  # keep errors for reference
+    else:
+        enriched["enrichment_status"] = "error"
         enriched["enrichment_errors"] = errors
 
     return enriched
@@ -671,7 +708,25 @@ def load_records() -> list[dict]:
     return records
 
 
+def _save_checkpoint(already_done: list, enriched_results: list, no_domain: list):
+    """Save intermediate results so we don't lose progress on crash."""
+    all_output = already_done + enriched_results
+    for r in no_domain:
+        r.setdefault("enrichment_status", "skipped_no_domain")
+        all_output.append(r)
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        for record in all_output:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 async def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Batch enrichment of records with domains")
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume from checkpoint: skip records already in output file")
+    args = parser.parse_args()
+
     start_time = time.time()
 
     print("=" * 70)
@@ -679,79 +734,157 @@ async def main():
     print("=" * 70)
     print()
 
-    # Load all records
+    # Load all records from source files
     print("Loading records...")
     all_records = load_records()
     print(f"  Total: {len(all_records)} records")
+
+    # Resume support: replace source records with enriched versions from output
+    if args.resume and OUTPUT_FILE.exists():
+        enriched_by_key = {}
+        with open(OUTPUT_FILE, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rec = json.loads(line)
+                    key = (rec.get("company_name", ""), rec.get("domain", ""))
+                    if key != ("", ""):
+                        enriched_by_key[key] = rec
+        if enriched_by_key:
+            merged = []
+            replaced = 0
+            for r in all_records:
+                key = (r.get("company_name", ""), r.get("domain", ""))
+                if key in enriched_by_key:
+                    merged.append(enriched_by_key[key])
+                    replaced += 1
+                else:
+                    merged.append(r)
+            all_records = merged
+            print(f"  Resume: replaced {replaced} records from previous checkpoint")
     print()
 
     # Partition into already-enriched vs needs-enrichment
+    # Records marked "complete" that already have MX data are truly done.
+    # Records marked "complete" WITHOUT MX data need DNS re-enrichment.
     already_done = []
-    to_enrich = []
+    to_enrich = []        # need full HTTP + DNS enrichment
+    to_enrich_dns = []    # already have tech_stack, just need MX/SPF
     no_domain = []
 
     for r in all_records:
-        if r.get("enrichment_status") == "complete":
-            already_done.append(r)
-        elif not r.get("domain"):
+        if not r.get("domain"):
             no_domain.append(r)
+        elif r.get("enrichment_status") == "complete" and r.get("has_mx") is not None:
+            already_done.append(r)
+        elif r.get("enrichment_status") == "complete" and r.get("has_mx") is None:
+            # Previously enriched but missing MX/SPF — needs DNS only
+            to_enrich_dns.append(r)
+        elif r.get("tech_stack"):
+            # Has tech data (maybe from prior partial run) — DNS only
+            to_enrich_dns.append(r)
         else:
             to_enrich.append(r)
 
-    print(f"Already enriched (skipping): {len(already_done)}")
-    print(f"No domain (skipping): {len(no_domain)}")
-    print(f"To enrich: {len(to_enrich)}")
+    print(f"Already enriched (skipping):     {len(already_done)}")
+    print(f"No domain (skipping):            {len(no_domain)}")
+    print(f"Need full enrichment (HTTP+DNS): {len(to_enrich)}")
+    print(f"Need DNS only (MX/SPF/email):    {len(to_enrich_dns)}")
     print()
 
-    if not to_enrich:
+    if not to_enrich and not to_enrich_dns:
         print("Nothing to enrich. Exiting.")
         return
 
-    # Enrich records
+    # Phase 1: DNS-only enrichment (fast, no HTTP needed)
     enriched_results = []
     error_types = Counter()
+    total_to_process = len(to_enrich) + len(to_enrich_dns)
     processed = 0
 
-    async with httpx.AsyncClient(
-        headers={"User-Agent": USER_AGENT},
-        follow_redirects=True,
-    ) as client:
-        for i, record in enumerate(to_enrich):
-            company = record.get("company_name", "unknown")
-            domain = record.get("domain", "")
-            processed += 1
+    if to_enrich_dns:
+        print(f"--- Phase 1: DNS-only enrichment ({len(to_enrich_dns)} records) ---")
+        async with httpx.AsyncClient(
+            headers={"User-Agent": USER_AGENT},
+            follow_redirects=True,
+        ) as client:
+            for record in to_enrich_dns:
+                company = record.get("company_name", "unknown")
+                domain = record.get("domain", "")
+                processed += 1
 
-            print(f"[{processed}/{len(to_enrich)}] {company} ({domain})...", end=" ", flush=True)
+                print(f"[DNS {processed}/{len(to_enrich_dns)}] {company} ({domain})...", end=" ", flush=True)
 
-            enriched = await enrich_record(client, record)
-            enriched_results.append(enriched)
+                enriched = await enrich_record(client, record, skip_http=True)
+                enriched_results.append(enriched)
 
-            # Log result
-            n_tech = len(enriched.get("tech_stack", []))
-            status = enriched.get("enrichment_status", "unknown")
-            errs = enriched.get("enrichment_errors", [])
-
-            if status == "complete":
                 extras = []
-                if n_tech > 0:
-                    extras.append(f"{n_tech} techs")
-                if enriched.get("schema_org"):
-                    extras.append("schema.org")
-                if enriched.get("cms"):
-                    extras.append(f"CMS:{enriched['cms']}")
                 if enriched.get("email_provider"):
                     extras.append(f"MX:{enriched['email_provider']}")
                 if enriched.get("spf_services"):
                     extras.append(f"SPF:{len(enriched['spf_services'])}")
-                print(f"OK ({', '.join(extras) if extras else 'no tech detected'})")
-            else:
-                for e in errs:
-                    error_types[e] += 1
-                print(f"ERROR ({', '.join(errs)})")
+                print(f"OK ({', '.join(extras) if extras else 'no DNS data'})")
 
-            # Rate limit
-            if i < len(to_enrich) - 1:
-                await asyncio.sleep(RATE_LIMIT_DELAY)
+                # Small delay to avoid DNS rate limiting
+                await asyncio.sleep(0.1)
+
+        print(f"\n  DNS-only phase complete: {len(to_enrich_dns)} records\n")
+
+    # Phase 2: Full HTTP + DNS enrichment
+    if to_enrich:
+        print(f"--- Phase 2: Full enrichment ({len(to_enrich)} records) ---")
+        processed = 0
+
+        async with httpx.AsyncClient(
+            headers={"User-Agent": USER_AGENT},
+            follow_redirects=True,
+        ) as client:
+            for i, record in enumerate(to_enrich):
+                company = record.get("company_name", "unknown")
+                domain = record.get("domain", "")
+                processed += 1
+
+                print(f"[{processed}/{len(to_enrich)}] {company} ({domain})...", end=" ", flush=True)
+
+                try:
+                    enriched = await enrich_record(client, record)
+                except Exception as exc:
+                    enriched = dict(record)
+                    enriched["enrichment_status"] = "error"
+                    enriched["enrichment_errors"] = [f"uncaught_{type(exc).__name__}"]
+                    print(f"FATAL_ERR: {exc!s:.80s}")
+                enriched_results.append(enriched)
+
+                n_tech = len(enriched.get("tech_stack", []))
+                status = enriched.get("enrichment_status", "unknown")
+                errs = enriched.get("enrichment_errors", [])
+
+                if status == "complete":
+                    extras = []
+                    if n_tech > 0:
+                        extras.append(f"{n_tech} techs")
+                    if enriched.get("schema_org"):
+                        extras.append("schema.org")
+                    if enriched.get("cms"):
+                        extras.append(f"CMS:{enriched['cms']}")
+                    if enriched.get("email_provider"):
+                        extras.append(f"MX:{enriched['email_provider']}")
+                    if enriched.get("spf_services"):
+                        extras.append(f"SPF:{len(enriched['spf_services'])}")
+                    print(f"OK ({', '.join(extras) if extras else 'no tech detected'})")
+                else:
+                    for e in errs:
+                        error_types[e] += 1
+                    print(f"ERROR ({', '.join(errs)})")
+
+                # Rate limit
+                if i < len(to_enrich) - 1:
+                    await asyncio.sleep(RATE_LIMIT_DELAY)
+
+                # Checkpoint every 100 records to avoid losing progress
+                if processed % 100 == 0:
+                    _save_checkpoint(already_done, enriched_results, no_domain)
+                    print(f"  [Checkpoint saved: {len(already_done) + len(enriched_results)} enriched]")
 
     # Combine all results: already_done + newly enriched + no_domain
     all_output = already_done + enriched_results
@@ -796,9 +929,10 @@ async def main():
     print("=" * 70)
     print("ENRICHMENT RESULTS SUMMARY")
     print("=" * 70)
-    print(f"Total records processed: {processed}")
+    print(f"Total records processed: {total_to_process}")
     print(f"Previously enriched:     {len(already_done)}")
-    print(f"Newly enriched:          {len([r for r in enriched_results if r.get('enrichment_status') == 'complete'])}")
+    print(f"DNS-only enriched:       {len(to_enrich_dns)}")
+    print(f"Full HTTP+DNS enriched:  {len([r for r in enriched_results if r not in to_enrich_dns and r.get('enrichment_status') == 'complete'])}")
     print(f"Errors:                  {len([r for r in enriched_results if r.get('enrichment_status') == 'error'])}")
     print(f"No domain (skipped):     {len(no_domain)}")
     print(f"Total output records:    {len(all_output)}")

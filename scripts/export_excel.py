@@ -70,6 +70,8 @@ class ExcelExporter:
         ("City", "city", 18),
         ("State", "state", 8),
         ("Country", "country", 15),
+        ("Street Address", "street", 35),
+        ("Zip Code", "zip_code", 12),
         ("Association(s)", "associations", 15),
         ("Membership Tier", "membership_tier", 15),
         ("Member Since", "member_since", 12),
@@ -719,7 +721,7 @@ def merge_records(enriched: list[dict], csv_records: list[dict]) -> list[dict]:
             if not combined.get("contacts") and csv_rec.get("contacts"):
                 combined["contacts"] = csv_rec["contacts"]
             # Fill in missing fields from CSV
-            for field in ["city", "state", "country", "phone", "industry", "source_url", "member_type", "notes"]:
+            for field in ["city", "state", "country", "phone", "industry", "source_url", "member_type", "notes", "street", "zip_code"]:
                 if not combined.get(field) and csv_rec.get(field):
                     combined[field] = csv_rec[field]
         else:

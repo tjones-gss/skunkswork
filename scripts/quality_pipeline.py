@@ -489,7 +489,8 @@ def score_records(records: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 ALL_CSV_FIELDS = [
     "company_name", "associations", "website", "domain",
-    "city", "state", "country", "phone", "member_type", "industry", "sector",
+    "city", "state", "country", "street", "zip_code",
+    "phone", "member_type", "industry", "sector",
     "employee_count_min", "employee_count_max",
     "notes", "tech_stack", "cms", "email_provider", "spf_services",
     "enrichment_status", "quality_score", "quality_grade",

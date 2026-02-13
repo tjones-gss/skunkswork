@@ -101,10 +101,12 @@ def compute_field_coverage(companies, enriched):
     has_employees = sum(
         1 for c in companies if c.get("employee_count_min", "").strip()
     )
+    has_street = sum(1 for c in companies if c.get("street", "").strip())
 
     return {
         "Website": (has_website, total),
         "Phone": (has_phone, total),
+        "Street Address": (has_street, total),
         "Email Provider": (has_email_provider, total),
         "Tech Stack": (has_tech_stack, total),
         "CMS": (has_cms, total),

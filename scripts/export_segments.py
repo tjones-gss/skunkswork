@@ -255,6 +255,58 @@ def filter_pma_premium(rec: dict) -> bool:
     return tier in ("PLATINUM", "GOLD")
 
 
+def filter_wordpress(rec: dict) -> bool:
+    cms = (rec.get("cms") or "").lower()
+    return "wordpress" in cms
+
+
+def filter_cloudflare(rec: dict) -> bool:
+    ts = parse_tech_stack(rec.get("tech_stack", []))
+    return any("cloudflare" in t.lower() for t in ts)
+
+
+def filter_woocommerce(rec: dict) -> bool:
+    ts = parse_tech_stack(rec.get("tech_stack", []))
+    return any("woocommerce" in t.lower() for t in ts)
+
+
+def filter_multi_association(rec: dict) -> bool:
+    csv_assoc = rec.get("associations_csv", "") or rec.get("associations", "")
+    if isinstance(csv_assoc, str) and ";" in csv_assoc:
+        parts = [a.strip() for a in csv_assoc.split(";") if a.strip()]
+        return len(parts) >= 2
+    if isinstance(csv_assoc, list):
+        return len(csv_assoc) >= 2
+    return False
+
+
+def filter_analytics_mature(rec: dict) -> bool:
+    ts = [t.lower() for t in parse_tech_stack(rec.get("tech_stack", []))]
+    has_ga = any("google analytics" in t for t in ts)
+    has_extra = any(kw in t for t in ts for kw in ("google tag manager", "adobe", "hotjar", "heap", "mixpanel", "segment"))
+    return has_ga and has_extra
+
+
+def filter_no_email_provider(rec: dict) -> bool:
+    ep = get_email_provider(rec)
+    website = (rec.get("website") or "").strip()
+    return not ep and bool(website)
+
+
+def filter_security_conscious(rec: dict) -> bool:
+    ep = get_email_provider(rec).lower()
+    return ep in ("proofpoint", "mimecast", "barracuda")
+
+
+def filter_publicly_traded(rec: dict) -> bool:
+    pt = rec.get("publicly_traded")
+    if isinstance(pt, bool):
+        return pt
+    if isinstance(pt, str):
+        return pt.lower() in ("true", "yes", "1")
+    return False
+
+
 SEGMENTS = [
     ("Salesforce Users", "Filter: SPF services contain Salesforce or Pardot", filter_salesforce),
     ("Legacy Email (On-Prem)", "Filter: email_provider is Self-hosted, Other, or empty", filter_legacy_email),
@@ -263,6 +315,14 @@ SEGMENTS = [
     ("Small Manufacturers", "Filter: employee_count_max <= 100 and has website", filter_small_mfg),
     ("Large Manufacturers", "Filter: employee_count_min >= 500", filter_large_mfg),
     ("PMA Premium Members", "Filter: membership_tier is PLATINUM or GOLD", filter_pma_premium),
+    ("WordPress Manufacturers", "Filter: CMS is WordPress", filter_wordpress),
+    ("Cloudflare CDN Users", "Filter: tech_stack contains Cloudflare", filter_cloudflare),
+    ("WooCommerce (eCommerce)", "Filter: tech_stack contains WooCommerce", filter_woocommerce),
+    ("Multi-Association Members", "Filter: member of 2+ associations", filter_multi_association),
+    ("Analytics-Mature", "Filter: Google Analytics + additional analytics tool", filter_analytics_mature),
+    ("No Email Provider", "Filter: no email provider detected but has website", filter_no_email_provider),
+    ("Security-Conscious", "Filter: Proofpoint, Mimecast, or Barracuda email", filter_security_conscious),
+    ("Publicly Traded", "Filter: SEC-identified public companies", filter_publicly_traded),
 ]
 
 

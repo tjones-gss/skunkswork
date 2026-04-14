@@ -41,6 +41,12 @@ COMPANY_SOURCES = [
     # SOCMA and AIA seeds
     ("SOCMA", DATA_RAW / "SOCMA" / "records.jsonl"),
     ("AIA", DATA_RAW / "AIA" / "records.jsonl"),
+    # New associations (Session 27 extraction sprint)
+    ("NADCA", DATA_RAW / "NADCA" / "records.jsonl"),
+    ("AMT", DATA_RAW / "AMT" / "records.jsonl"),
+    ("AFS", DATA_RAW / "AFS" / "records.jsonl"),
+    # AGMA supplemental (new members from /resources/member-list/)
+    ("AGMA", DATA_RAW / "AGMA" / "records_supplemental.jsonl"),
 ]
 
 EVENTS_FILE = DATA_RAW / "events" / "trade_shows.jsonl"

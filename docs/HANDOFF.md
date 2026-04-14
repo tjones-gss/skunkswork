@@ -4,6 +4,246 @@ This document tracks implementation progress and provides context for session co
 
 ---
 
+## Latest Session: 2026-04-14 (Session 33) — AFS Castingsource Directory Extraction
+
+### Session Summary
+Extracted 337 US metalcaster companies from the AFS Castingsource directory (https://www.castingsource.com/metalcaster-directory) using Playwright. Paginated through all 14 pages (pages 0-13) with full address parsing (street, city, state, zip) and website/domain extraction. 100% address coverage, 98% website coverage.
+
+### Completed This Session
+1. **`scripts/extract_afs.py`** — AFS extractor (NEW, ~240 lines):
+   - GET-based form: `?country=US&page=N` URL pattern (Drupal Views, `domcontentloaded` wait)
+   - Targets `.view-metalcaster-directory .views-row` entries specifically (filters out embedded process-search view)
+   - Company name: `.views-field-Company-Name__c .company-name`
+   - Address: `.views-field-Country__c .field-content` — format `"STREET\nCITY, ST ZIP, US"`
+   - Website: `.views-field-Org-URL__c .field-content`
+   - Regex: `r"^(.+),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)(?:,\s*US)?$"` handles `, US` suffix
+   - Auto-detects last page from `.pager__items` links (page 13 = 14 total pages)
+   - Deduplicates by (company_name, city, state)
+
+2. **`data/raw/AFS/records.jsonl`** — 337 US metalcaster records:
+   - 337/337 have street, city, state, zip (100%)
+   - 330/337 have website (98%)
+   - 330/337 have domain
+   - Top states: WI(41), PA(37), OH(29), IL(28), IN(26), MI(22)
+   - Fields: company_name, street, city, state, zip_code, website, domain, association("AFS"), source_url, extracted_at, country("United States")
+
+### Files Modified
+- `scripts/extract_afs.py` — NEW (~240 lines)
+- `data/raw/AFS/records.jsonl` — NEW (337 records)
+
+### Key Decisions
+- `views-field-Country__c` is a misnamed Drupal field that actually contains the full postal address (a Salesforce/CRM field mapping artifact)
+- The page embeds two Drupal Views: `metalcaster_directory` (what we want) and `metalcasting_process_search` (noise) — targeted by view class name
+- Pages 14+ beyond the pager range serve stale/looped view data; capped at last pager page number
+- All 337 are AFS Corporate Member foundries — the complete US membership list
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
+## Latest Session: 2026-04-14 (Session 32) — AMT Member Directory Extraction
+
+### Session Summary
+Extracted 111 member companies from AMT (Association for Manufacturing Technology) at https://amtonline.org/membership/member-directory using Playwright headed browser. The site is Angular 15 SSR with client-side pagination — standard HTTP fails. Per-member-type filter scraping captured all 4 member types in separate passes, then deduplicated.
+
+### Completed This Session
+1. **`scripts/amt_scraper.py`** — NEW Playwright-based scraper for AMT Angular directory:
+   - Headed Chromium browser with stealth (webdriver property hidden)
+   - Detects Angular card structure: `div.card > div.card-body > h4.card-title + p.card-text`
+   - Pagination: `div.pagination > div.pages` (active class = current page), 5 pages × 21 cards = 105 per filter type
+   - Per-member-type filtering: clicks each of 4 filter buttons (Regular, Commercial Affiliates, Research and Education, Affiliates) separately and scrapes all pages for each
+   - Location parsing: AMT shows "State, Country" format (e.g., "Michigan, United States") — converts to 2-letter state abbreviation via STATE_ABBREVS dict
+   - Rate limiting: 1.5s between extractions, 2.5s after page click, 2.5s after filter click
+
+2. **`data/raw/AMT/records.jsonl`** — 111 unique records extracted:
+   - Regular: 105 (ERP targets)
+   - Research and Education: 5
+   - Commercial Affiliates: 1
+   - Top states: IL (19), MI (14), CA (7), OH (7), NC (7), PA (7), NY (6)
+   - All 111 are US companies
+   - city field is empty (AMT only shows state-level location on directory cards)
+
+### Files Modified
+- `scripts/amt_scraper.py` — NEW
+- `data/raw/AMT/records.jsonl` — NEW (111 records)
+
+### Key Decisions
+- City field left empty: AMT directory cards only show "State, Country" — no city data available without clicking into individual company profile pages
+- All 4 member type filters scraped separately so member_type is correctly assigned per record (Regular vs non-Regular)
+- Dedup strategy: prefer Regular type if same company appears under multiple filter passes
+- The directory has no "Affiliates" filter results distinct from the main 105 (total unique after dedup = 111, not 420)
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
+## Latest Session: 2026-04-14 (Session 31) — ABM Campaign Playbooks Workbook
+
+### Session Summary
+Created `scripts/abm_campaign_playbooks.py` — generates `data/exports/GSS_Campaign_Playbooks.xlsx`, a 7-sheet ABM playbook workbook with campaign strategy, email templates, call scripts, channel recommendations, event timing, KPIs, and target company lists for 6 distinct campaigns.
+
+### Completed This Session
+1. **`scripts/abm_campaign_playbooks.py`** — Campaign playbooks generator (NEW, ~600 lines):
+   - Sheet 1 (Campaign Overview): 6-campaign summary table with target accounts, with-contacts counts, avg ICP score, primary channel, event tie-ins, and priority. P1/P2/P3 color-coded rows.
+   - Sheet 2 (Microsoft Ecosystem Modernization): 637 accounts (Microsoft 365 email). Avg ICP 67.2.
+   - Sheet 3 (Legacy IT Transformation): 1,126 accounts (self-hosted/on-premise email). Avg ICP 56.6.
+   - Sheet 4 (Salesforce CRM Cross-Sell): 126 accounts (Salesforce/Pardot in SPF). Avg ICP 65.6.
+   - Sheet 5 (PMA Association Blitz): 975 accounts (PMA members). Avg ICP 71.9.
+   - Sheet 6 (Greenfield ERP): 715 accounts (no ERP detected, known employee count). Avg ICP 75.2.
+   - Sheet 7 (Competitive Displacement): 0 accounts (Wappalyzer cannot detect on-premise ERP — data limitation, see Key Decisions).
+
+2. **Per-campaign playbook content** — each sheet includes: title block, audience description, 3 key messages, 3 email templates (cold intro / follow-up / event-based) with merge fields, call script (opener + 2 qualifying questions), channel strategy (4 channels with rationale), event timing (3 events with campaign tactic), KPIs (4 metrics with targets and rationale), and filtered company list sorted by ICP score descending.
+
+3. **Path resolution for git worktrees** — script detects main repo data root by walking up the filesystem looking for `companies_all.csv`, then patches `abm_shared` module constants at runtime so all data loading functions resolve correctly even when run from a worktree.
+
+### Files Modified
+- `scripts/abm_campaign_playbooks.py` — NEW (~600 lines)
+- `scripts/abm_shared.py` — copied to worktree (no changes)
+- `data/exports/GSS_Campaign_Playbooks.xlsx` — NEW (339 KB, 7 sheets)
+
+### Key Decisions
+- Competitive Displacement (Sheet 7) outputs 0 target companies: the pipeline's tech stack enrichment uses Wappalyzer, which detects web technologies (CMS, analytics, CDN) but cannot detect on-premise ERP installations. Zero ERP competitor signals exist in the dataset. Sheet is fully functional and will populate when `erp_system` field is populated via manual data entry, CRM import, or a richer data provider (ZoomInfo ERP signals, Apollo technographics).
+- Greenfield filter requires `employee_count > 0` to exclude companies with unknown size — this is intentional to avoid targeting companies where we can't size the deal.
+- All company lists sorted by ICP score descending so the highest-fit accounts appear at the top of each playbook.
+- Email templates and call scripts are embedded as Python dicts (not external files) for portability.
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
+## Latest Session: 2026-04-14 (Session 30) — Competitive Battlecards Workbook
+
+### Session Summary
+Created `scripts/abm_battlecards.py` — generates `data/exports/GSS_Competitive_Battlecards.xlsx`, a 3-sheet competitive intelligence workbook for the GSS sales team covering all 15 tracked ERP competitors.
+
+### Completed This Session
+1. **`scripts/abm_battlecards.py`** — Battlecard generator:
+   - Sheet 1 (Battlecard Summary): One row per competitor, sorted HIGH → MEDIUM → EMERGING → LOW threat. Columns: Competitor, Threat Level (color-coded), Show Presence, Strategy Notes, GSS Response, Companies Detected, Primary Associations, Key Events. Event-to-competitor correlation done by keyword matching presence field against events CSV.
+   - Sheet 2 (Detailed Battlecards): Per-competitor sections with: Positioning statement, Win Themes (numbered bullets), Objections & Rebuttals (Q&A format), Technical Differentiators (Feature / Advantage table), Displacement Triggers (lightning bolt bullets), Talk Track. Sections separated by threat-level colored headers.
+   - Sheet 3 (Competitor-Account Matrix): Placeholder for companies where competitor ERP was detected in tech_stack/spf_services/erp_system. Currently 0 rows because Wappalyzer detects web technologies, not on-premise ERP systems — will populate as manual tagging or richer data sources are added.
+
+2. **Custom battlecard content for all 15 competitors** — embedded `BATTLECARD_CONTENT` dict covers 12 competitors with full custom content; 3 additional entries written this session (DELMIAWorks, Fulcrum, ECI/JobBOSS, IFS) so no competitors fall back to generic content.
+
+3. **`_lookup_content()` helper** — multi-stage name matching handles CSV competitor names with slashes and parens (e.g., "Plex/Rockwell", "ECI (JobBOSS/M1)", "NetSuite/Oracle") without requiring exact dict key matches.
+
+### Files Modified
+- `scripts/abm_battlecards.py` — NEW (530 lines)
+- `data/exports/GSS_Competitive_Battlecards.xlsx` — NEW (18 KB, 3 sheets)
+
+### Key Decisions
+- Sheet 3 (Competitor-Account Matrix) intentionally outputs 0 rows: competitor ERP detection via Wappalyzer/SPF signals cannot find on-premise ERP installs. Sheet is fully functional and will populate when CRM import data, manual tagging, or a richer data provider (ZoomInfo, BuiltWith ERP signals) adds `erp_system` values.
+- Battlecard content is embedded as a Python dict (not loaded from external file) for portability — sales reps can run the script offline and always get current content.
+- Threat-level sort order: HIGH (0), MEDIUM (1), EMERGING (2), LOW (3) — Emerging before Low puts Fulcrum/Odoo ahead of legacy-declining competitors.
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
+## Latest Session: 2026-04-14 (Session 29) — Executive Briefing Workbook
+
+### Session Summary
+Created `scripts/abm_executive_briefing.py` — a 6-sheet presentation-ready Excel workbook for leadership at `data/exports/GSS_Executive_Briefing.xlsx`. Designed as a "slide-deck in Excel" with large KPI cells, color-coded status cells, and strategic recommendations organized into 30/60/90-day action plans.
+
+### Completed This Session
+1. **`scripts/abm_executive_briefing.py`** — Executive briefing generator:
+   - Sheet 1 (Executive Overview): Title, 6 KPI rows with large 22pt value font, 5 pipeline status bullets
+   - Sheet 2 (Market Opportunity): TAM table (14 associations, 7,311 expected members), Market Size Estimate, Priority Matrix — pending associations highlighted yellow
+   - Sheet 3 (Data Quality Scorecard): Grade distribution (A–F with GRADE_FILLS), 9-field enrichment coverage table (Good/Fair/Needs Work status), quality summary
+   - Sheet 4 (Top 25 Target Accounts): Highest ICP-scored companies with campaign recommendation, tier + ICP score color-coded
+   - Sheet 5 (Competitive Threats): 15 competitors sorted by threat level (THREAT_FILLS), key insights panel (greenfield count, top competitor, most contested association)
+   - Sheet 6 (Investment Recommendations): 10 actions across 3 horizons (30/60/90 days), Impact/Effort cells color-coded (green/yellow/red)
+
+2. **Key stats generated**:
+   - 2,096 companies loaded, TAM 7,311 expected across 14 associations
+   - Tier 1: 471, Tier 2: 811, Tier 3: 814 accounts
+   - 2,096 greenfield accounts (no ERP detected — expected, Wappalyzer detects web tech not on-premise ERP)
+   - Avg quality score: 72.4
+
+### Files Modified
+- `scripts/abm_executive_briefing.py` — NEW
+- `data/exports/GSS_Executive_Briefing.xlsx` — NEW (19 KB, 6 sheets)
+
+### Key Decisions
+- Greenfield count = 2,096 (100%) is accurate — Wappalyzer cannot detect on-premise ERP systems (SAP, Epicor, etc.), so all pipeline companies are greenfield from web-tech detection perspective. Competitor ERP presence can only be detected from CRM/SPF signals or manual tagging.
+- ICP scoring re-computed at generation time (same model as abm_icp_scoring.py) — no pre-stored scores needed
+- Column widths and row heights tuned for landscape A4 print area on all sheets
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
+## Latest Session: 2026-04-14 (Session 28) — Interactive HTML Dashboard
+
+### Session Summary
+Created `scripts/build_dashboard.py` — a Python script that generates a fully self-contained, offline-capable HTML dashboard at `data/exports/GSS_Intelligence_Dashboard.html`. The dashboard embeds 2,096 company records, all stats, and Chart.js visualizations into a single 800 KB HTML file with no server required.
+
+### Completed This Session
+1. **`scripts/build_dashboard.py`** — Dashboard generator:
+   - Loads/merges data via `abm_shared.load_and_merge_data()`, events, and competitors
+   - Pre-computes all stats: KPIs, 6 chart datasets, 7 segment counts, ICP scores
+   - Compresses company records to abbreviated keys (reducing JSON payload ~40%)
+   - Injects `DASHBOARD_DATA` JSON into HTML template; writes ~800 KB `.html`
+
+2. **`data/exports/GSS_Intelligence_Dashboard.html`** — Output dashboard:
+   - **Tab 1 (Overview)**: 6 KPI cards + circular progress, 6 Chart.js charts (by-association vertical bar with drill-down, quality histogram with color gradient, email provider donut with center count, top-15 states horizontal bar, top-10 tech stack, SPF services)
+   - **Tab 2 (Companies)**: Sticky filter bar (search, association, state, grade, email provider, tier), paginated sortable table (50/page, 9 columns), slide-in detail panel with full firmographic + tech stack pills + ICP score, Export CSV for filtered results
+   - **Tab 3 (Segments)**: 7 segment cards (Salesforce Users 126, Legacy Email 1,126, Microsoft 365 637, Marketing Automation 124, Small Mfg 468, Large Mfg 0, PMA Premium 349), each with "View" button that filters Companies tab
+   - **Tab 4 (Competitive Intel)**: Competitor table with threat level badges + GSS response classifications, events list with priority badges
+
+3. **Design features**: Dark/light mode toggle (persists to localStorage), responsive layout, print-friendly media query, sticky header + tabs bar, professional navy/gold GSS theme
+
+### Files Modified
+- `scripts/build_dashboard.py` — NEW (worktree + main project)
+- `data/exports/GSS_Intelligence_Dashboard.html` — NEW (regenerate with `python scripts/build_dashboard.py`)
+
+### Key Decisions
+- Single HTML file with inline CSS/JS (no external template file) — fully offline capable
+- Company records compressed to abbreviated keys (n/d/st/ep/qs/ic/tr/etc.) — 750 KB JSON payload for 2,096 records
+- Chart.js 4.x from CDN is the only external dependency (requires internet for first load only if cached)
+- Association bar chart is clickable — drills into Companies tab with filter applied
+- ICP scores computed in Python at build time, not recalculated in-browser
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
+## Latest Session: 2026-04-14 (Session 27) — ABM Target Lists
+
+### Session Summary
+Created `scripts/abm_target_lists.py` — a 5-sheet ABM target list workbook that tiers all 2,096 companies into Tier 1 (top 50 strategic), Tier 2 (200 growth), and Tier 3 (nurture) using the ICP scoring model from `abm_shared.py`. Avg ICP score across all records: 60.5.
+
+### Completed This Session
+1. **GSS_ABM_Target_Lists.xlsx** — 5-sheet workbook:
+   - **Sheet 1 — Tier 1 Strategic (50 rows)**: Full 22-column detail including recommended campaign, event overlap, and competitor presence for top 50 accounts (ICP ≥ 75 + contacts + quality ≥ 70). Top account: HYSON (ICP 89, Greenfield ERP campaign).
+   - **Sheet 2 — Tier 2 Growth (200 rows)**: Same 22 columns + Enrichment Gaps column. Sorted by ICP desc.
+   - **Sheet 3 — Tier 3 Nurture (814 rows)**: Trimmed 11 columns for mass nurture workflow.
+   - **Sheet 4 — Account Assignment Matrix (250 rows)**: Tier1+Tier2 with 4 yellow-highlighted empty columns (Assigned Rep, Campaign Stage, Next Action Date, Notes) for sales manager fill-in.
+   - **Sheet 5 — Tier Summary Statistics**: 4 tables — Tier Distribution (with/contacts/website/techstack %), Tier 1 by State (top 10), Tier 1 by Association, Enrichment Gap Analysis (Tier 2 fields prioritized High/Med/Low).
+
+2. **Recommended Campaign logic**: 6 campaign types auto-assigned per account based on strongest ICP dimension — Competitive Displacement, Microsoft Ecosystem, Legacy Transformation, Greenfield ERP, Association Blitz, Multi-touch Nurture.
+
+3. **Event Overlap logic**: Cross-references events from events_2026.csv by association code (PMA → FABTECH/PMA Forming/IMTS, NEMA → NEMA Annual/IPC APEX/Automate, etc.).
+
+### Files Modified
+- `scripts/abm_target_lists.py` — NEW
+
+### Key Decisions
+- Tier 1 capped at 50 (per spec); 471 records qualified for Tier 1 criteria but only top 50 shown.
+- Tier 3 shows all 814 qualifying records (no cap on nurture list).
+- Assignment Matrix combines Tier1+Tier2 = 250 rows — the active pipeline.
+- ASSOC_EVENT_MAP hardcoded for 13 associations; defaults to IMTS+FABTECH for unknown assocs.
+
+### Test Results
+- 1,881 passed, 1 skipped, 0 failures (unchanged — no test changes this session)
+
+---
+
 ## Latest Session: 2026-02-10 (Session 26) — Marketing Deliverables Sprint
 
 ### Session Summary

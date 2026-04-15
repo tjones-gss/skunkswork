@@ -93,8 +93,9 @@ STREET_RE = re.compile(
     re.IGNORECASE,
 )
 
-# ZIP code (5-digit or 5+4)
-ZIP_RE = re.compile(r'\b(\d{5})(?:-\d{4})?\b')
+# ZIP code (5-digit or 5+4) — must not be preceded or followed by digits or dots
+# (prevents matching CSS percentages like 46.26486%)
+ZIP_RE = re.compile(r'(?<![.\d])(\d{5}(?:-\d{4})?)(?![.\d])')
 
 # US state abbreviations in address context
 STATE_RE = re.compile(
@@ -391,18 +392,28 @@ def extract_address_from_html(html: str, text: str) -> dict:
                 result["street_address"] = raw_street[:100]
             break  # Use first <address> tag only
 
-    # 2. City, State ZIP from visible text (if not found above)
+    # 2. City, State ZIP from visible text — only trust matches that include
+    #    a ZIP code (5-digit), which greatly reduces false positives from
+    #    company name text like "Blaser Swisslube, Inc." matching a state abbrev.
     if not result.get("city"):
         matches = CITY_STATE_ZIP_RE.findall(text)
         for match in matches:
             city, state, zipcode = match
             city = city.strip()
-            # Filter noise: skip very long "cities" or common false positives
-            if 2 <= len(city) <= 30 and not re.search(r'\d', city):
+            # Require a real ZIP code to anchor the match as an actual address
+            if not zipcode:
+                continue
+            # Filter noise: skip very long "cities", those with digits, or
+            # multi-word candidates >22 chars that are likely company names.
+            if (
+                2 <= len(city) <= 22
+                and not re.search(r'\d', city)
+                and len(city.split()) <= 3
+                and "," not in city
+            ):
                 result["city"] = city.title()
                 result["state"] = state.upper()
-                if zipcode:
-                    result["zip_code"] = zipcode
+                result["zip_code"] = zipcode
                 break
 
     # 3. ZIP code alone (if city not found)
@@ -630,14 +641,22 @@ def enrich_company(client, company: dict) -> dict:
     all_text = ""
     all_html = ""
 
+    def html_to_text(html: str) -> str:
+        """Strip HTML tags and CSS/JS blocks to get visible text."""
+        # Remove <style>...</style> and <script>...</script> blocks first
+        h = re.sub(r'<style[^>]*>.*?</style>', ' ', html, flags=re.IGNORECASE | re.DOTALL)
+        h = re.sub(r'<script[^>]*>.*?</script>', ' ', h, flags=re.IGNORECASE | re.DOTALL)
+        # Strip remaining tags
+        h = re.sub(r'<[^>]+>', ' ', h)
+        # Collapse whitespace
+        return re.sub(r'\s+', ' ', h).strip()
+
     # --- Step 1: Fetch homepage ---
     homepage_html, final_url = fetch_page(client, base_url)
     if homepage_html:
         result["pages_crawled"].append(final_url or base_url)
         all_html += homepage_html
-        # Get visible text (strip tags)
-        visible_text = re.sub(r'<[^>]+>', ' ', homepage_html)
-        visible_text = re.sub(r'\s+', ' ', visible_text)
+        visible_text = html_to_text(homepage_html)
         all_text += visible_text
 
         # Schema.org from homepage
@@ -669,8 +688,7 @@ def enrich_company(client, company: dict) -> dict:
         if chtml and len(chtml) > 500:
             result["pages_crawled"].append(cfinal or contact_url)
             contact_html = chtml
-            visible = re.sub(r'<[^>]+>', ' ', chtml)
-            visible = re.sub(r'\s+', ' ', visible)
+            visible = html_to_text(chtml)
             all_text += " " + visible
             all_html += chtml
 
@@ -709,10 +727,20 @@ def enrich_company(client, company: dict) -> dict:
             result["enrichment_source"].append(f"html:{field}_pattern")
 
     # Preserve existing CSV values if we didn't find new ones
+    # (existing CSV values are authoritative — only fill gaps)
     if not result["city"] and company.get("city"):
         result["city"] = company["city"]
     if not result["state"] and company.get("state"):
         result["state"] = company["state"]
+    # Final sanity-check on city: schema.org or <address> tags can sometimes
+    # return company name fragments if the address block is malformed.
+    # Drop any extracted city that looks like a company name.
+    city_val = result.get("city", "")
+    if city_val and re.search(
+        r'\b(Inc|LLC|Corp|Co|Ltd|GmbH|AG|SA|Group|Systems?|Solutions?|Industries|Manufacturing)\b',
+        city_val, re.IGNORECASE
+    ):
+        result["city"] = company.get("city", "")  # fall back to CSV value (may be empty)
     if not result["phone"] and company.get("existing_phone"):
         result["phone"] = company["existing_phone"]
     if not result["street_address"] and company.get("existing_street"):

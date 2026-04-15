@@ -170,15 +170,22 @@ def build_indeed_url(company_name: str) -> str:
 
 
 def _is_blocked(html: str) -> bool:
-    """Detect bot/captcha blocks."""
-    lower = html.lower()
+    """Detect bot/captcha blocks.
+
+    Only inspect the first 3 KB of HTML — that's the <head> where a real
+    challenge page puts its content.  The full Indeed page legitimately
+    contains strings like "recaptcha_tst" in deeply-buried JSON, so
+    searching the whole document produces false positives.
+    """
+    head = html[:3000].lower()
     return (
-        "captcha" in lower
-        or "unusual traffic" in lower
-        or "verify you are human" in lower
-        or 'id="challenge-form"' in lower
-        or "authenticating..." in lower
-        or "redirecting to login" in lower
+        "unusual traffic" in head
+        or "verify you are human" in head
+        or 'id="challenge-form"' in head
+        or "<title>authenticating" in head
+        or "redirecting to login" in head
+        or ("<title>" in head and "jobs" not in head and "indeed" not in head
+            and len(html) < 10_000)
     )
 
 
@@ -422,26 +429,41 @@ class IndeedScraper:
     def fetch(self, url: str) -> tuple[str | None, str]:
         """Fetch a URL and return (html_or_None, status_tag).
 
-        status_tag is one of: 'ok', 'blocked', 'captcha', 'error'.
+        status_tag is one of: 'ok', 'blocked', 'error'.
+        On navigation errors we attempt to recover by navigating away first.
         """
         try:
             self._page.goto(url, timeout=PAGE_LOAD_TIMEOUT, wait_until="domcontentloaded")
         except Exception as e:
             err_msg = str(e).lower()
-            if "timeout" in err_msg:
+            # Target closed / navigation aborted often means the page triggered
+            # a JS redirect (e.g. Indeed's auth redirect). Try to recover by
+            # landing on Indeed homepage first, then retry.
+            if "target" in err_msg or "navigation" in err_msg or "crash" in err_msg:
+                try:
+                    self._page.goto("https://www.indeed.com/", timeout=PAGE_LOAD_TIMEOUT,
+                                    wait_until="domcontentloaded")
+                    time.sleep(2)
+                    self._page.goto(url, timeout=PAGE_LOAD_TIMEOUT, wait_until="domcontentloaded")
+                except Exception:
+                    return None, "error"
+            else:
                 return None, "error"
-            return None, "error"
 
-        # Wait briefly for JS to inject the mosaic data
+        # Wait briefly for JS to inject the mosaic data.
+        # Use a short timeout — pages with 0 results won't have mosaic.
         try:
             self._page.wait_for_function(
-                "() => typeof window.mosaic !== 'undefined'",
+                "() => !!(window.mosaic && window.mosaic.providerData)",
                 timeout=SELECTOR_TIMEOUT,
             )
         except Exception:
-            pass  # page may not have mosaic at all (0 results is fine)
+            pass  # 0-result pages won't have mosaic; that's fine
 
-        html = self._page.content()
+        try:
+            html = self._page.content()
+        except Exception:
+            return None, "error"
 
         if _is_blocked(html):
             return None, "blocked"
@@ -471,14 +493,13 @@ class IndeedScraper:
         if status == "blocked":
             print(f"      [blocked/captcha] backing off {CAPTCHA_BACKOFF}s")
             time.sleep(CAPTCHA_BACKOFF)
-            # Retry once after backoff
+            # Retry once after captcha backoff
             html, status = self.fetch(url)
-            if html is None:
-                base_result["hiring_signal"] = "error"
-                return base_result
 
         if html is None:
-            base_result["hiring_signal"] = "error"
+            # "error" = navigation failed; treat as 0 results, not a hard error,
+            # so we don't cascade captcha backoffs through the whole run.
+            # hiring_signal stays "none" which is correct (we simply don't know).
             return base_result
 
         all_jobs = extract_jobs_from_html(html)

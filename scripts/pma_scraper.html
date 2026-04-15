@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head><title>PMA Profile Scraper</title></head>
+<body>
+<h1>PMA Profile Scraper</h1>
+<div id="status">Loading member IDs...</div>
+<div id="progress"></div>
+<div id="stats"></div>
+<pre id="log" style="max-height:400px;overflow:auto;font-size:11px;"></pre>
+<script>
+// This page runs in the MCP browser context which has Cloudflare cookies
+// It fetches all PMA profile pages and stores results in window._results
+
+const DELAY_MS = 2000; // 2 seconds between requests (0.5 req/sec)
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent = msg + '\n' + el.textContent;
+}
+
+function parseProfile(html, mid) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const article = doc.querySelector('article');
+  if (!article) return { member_id: mid, _error: 'no article' };
+
+  const enriched = { member_id: mid, enriched_at: new Date().toISOString() };
+
+  // Company name
+  const h2 = article.querySelector('.member-search-results h2');
+  if (h2) enriched.company_name = h2.textContent.trim();
+
+  // Address
+  const addrDiv = article.querySelector('.company-address');
+  if (addrDiv) {
+    const t = addrDiv.innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+    const lines = t.split('\n').map(l => l.replace(/\u00a0/g, ' ').trim()).filter(l => l && l !== 'Map Location');
+    if (lines[0]) enriched.street = lines[0];
+    if (lines[1]) {
+      const m = lines[1].match(/^(.+?),\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+      if (m) { enriched.city = m[1].trim(); enriched.state = m[2]; enriched.zip_code = m[3]; }
+    }
+    if (lines[2]) enriched.country = lines[2];
+  }
+
+  // Phone/Fax/Website
+  const cd = article.querySelector('.company-contact');
+  if (cd) {
+    const ct = cd.textContent;
+    const pm = ct.match(/Phone:\s*([^\n]+)/); if (pm) enriched.phone = pm[1].trim();
+    const fm = ct.match(/Fax:\s*([^\n]+)/); if (fm) enriched.fax = fm[1].trim();
+    const wl = cd.querySelector('a[href]');
+    if (wl) {
+      const href = wl.getAttribute('href');
+      if (href.includes('/go.asp?url=')) enriched.website = href.split('/go.asp?url=')[1];
+      else if (href.startsWith('http')) enriched.website = href;
+      if (enriched.website) {
+        try {
+          const u = new URL(enriched.website.startsWith('http') ? enriched.website : 'http://' + enriched.website);
+          enriched.domain = u.hostname.replace(/^www\./, '').toLowerCase();
+        } catch (e) {}
+      }
+    }
+  }
+
+  // Facility
+  const fd = article.querySelector('.company-facility');
+  if (fd) {
+    const ft = fd.textContent;
+    const sm = ft.match(/Facility Size:\s*([\d,]+)/); if (sm) enriched.facility_size_sqft = sm[1].replace(/,/g, '');
+    const em = ft.match(/Employees:\s*([^\n]+)/);
+    if (em) {
+      enriched.employees = em[1].trim();
+      const rm = enriched.employees.match(/^(\d[\d,]*)\s*-\s*(\d[\d,]*)/);
+      if (rm) {
+        enriched.employee_count_min = parseInt(rm[1].replace(/,/g, ''));
+        enriched.employee_count_max = parseInt(rm[2].replace(/,/g, ''));
+      }
+    }
+  }
+
+  // Membership
+  const ld = article.querySelector('.company-level');
+  if (ld) {
+    const lt = ld.textContent;
+    const tm = lt.match(/(PLATINUM|GOLD|SILVER|BRONZE|PREMIER)\s+MEMBER/i);
+    if (tm) enriched.membership_tier = tm[1].toUpperCase();
+    const sm2 = lt.match(/Member Since:\s*(\d{4})/);
+    if (sm2) enriched.member_since = sm2[1];
+  }
+
+  // Contacts from HTML comments
+  const contacts = [];
+  const cre = /<!--([\s\S]*?)-->/g;
+  let cm;
+  while ((cm = cre.exec(html)) !== null) {
+    if (!cm[1].includes('contact-info')) continue;
+    const blocks = cm[1].split('<div class="contact-info"');
+    for (let bi = 1; bi < blocks.length; bi++) {
+      const b = blocks[bi];
+      const c = {};
+      const nm = b.match(/<strong>(.*?)<\/strong>/); if (nm) c.name = nm[1].trim();
+      const ttm = b.match(/<\/strong>\s*<br>\s*\n?\s*(.+?)\s*<br>/);
+      if (ttm && !ttm[1].startsWith('Phone') && !ttm[1].startsWith('Fax') && !ttm[1].startsWith('<'))
+        c.title = ttm[1].trim();
+      const epm = b.match(/Phone:\s*(?:&nbsp;)?\s*([^<\n]+)/); if (epm) c.phone = epm[1].trim();
+      const emm = b.match(/<a\s+class="no-mail"\s+name="([^"]+)"\s+rel="([^"]+)"/);
+      if (emm) c.email = emm[1] + '@' + emm[2].replace(/#/g, '.');
+      if (c.name) contacts.push(c);
+    }
+  }
+  if (contacts.length) enriched.contacts = contacts;
+
+  // Description
+  for (const h3 of article.querySelectorAll('h3')) {
+    if (h3.textContent.includes('Company Description')) {
+      const p = h3.closest('.member-search-blocks');
+      if (p) {
+        const d = p.textContent.replace('Company Description', '').trim();
+        if (d) enriched.description = d;
+      }
+    }
+  }
+
+  // List sections
+  for (const h3 of article.querySelectorAll('h3')) {
+    const hd = h3.textContent.trim();
+    const p = h3.closest('.member-search-blocks');
+    if (!p) continue;
+    const items = [];
+    for (const d of p.querySelectorAll('div[style]')) {
+      const t = d.textContent.trim();
+      if (t) items.push(t);
+    }
+    if (!items.length) continue;
+    if (hd.includes('Manufacturing Processes')) enriched.manufacturing_processes = items;
+    else if (hd.includes('Certifications')) enriched.certifications = items;
+    else if (hd.includes('Markets Served')) enriched.markets_served = items;
+    else if (hd.includes('Electronic Capabilities')) enriched.electronic_capabilities = items;
+  }
+
+  return enriched;
+}
+
+async function scrapeAll(memberIds) {
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const results = [];
+  const startTime = Date.now();
+
+  window._results = results;
+  window._done = false;
+  window._stats = {};
+
+  document.getElementById('status').textContent = `Scraping ${memberIds.length} profiles...`;
+
+  for (let i = 0; i < memberIds.length; i++) {
+    const mid = memberIds[i];
+    const url = `https://www.pma.org/directory/profile.asp?id=${mid}`;
+    const pct = ((i + 1) / memberIds.length * 100).toFixed(1);
+    const elapsed = (Date.now() - startTime) / 1000;
+    const rate = (i + 1) / elapsed * 3600;
+    const eta = ((memberIds.length - i - 1) / (rate / 3600)).toFixed(0);
+
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        results.push({ member_id: mid, _error: `HTTP ${resp.status}` });
+        log(`[${i + 1}/${memberIds.length}] ${mid} - HTTP ${resp.status}`);
+      } else {
+        const html = await resp.text();
+        const parsed = parseProfile(html, mid);
+        results.push(parsed);
+        const hasWeb = parsed.website ? 'Y' : 'N';
+        const hasPh = parsed.phone ? 'Y' : 'N';
+        const nCont = (parsed.contacts || []).length;
+        log(`[${i + 1}/${memberIds.length}] ${parsed.company_name || mid} - web:${hasWeb} ph:${hasPh} contacts:${nCont}`);
+      }
+    } catch (e) {
+      results.push({ member_id: mid, _error: e.message });
+      log(`[${i + 1}/${memberIds.length}] ${mid} - ERROR: ${e.message}`);
+    }
+
+    document.getElementById('progress').textContent =
+      `Progress: ${i + 1}/${memberIds.length} (${pct}%) | ETA: ${eta}s | Elapsed: ${elapsed.toFixed(0)}s`;
+
+    // Update stats
+    const stats = {
+      total: memberIds.length,
+      done: i + 1,
+      ok: results.filter(r => r.enriched_at).length,
+      errors: results.filter(r => r._error).length,
+      websites: results.filter(r => r.website).length,
+      phones: results.filter(r => r.phone).length,
+      withContacts: results.filter(r => r.contacts).length,
+      totalEmails: results.reduce((s, r) => s + (r.contacts || []).filter(c => c.email).length, 0),
+    };
+    window._stats = stats;
+    document.getElementById('stats').textContent = JSON.stringify(stats);
+
+    if (i < memberIds.length - 1) await delay(DELAY_MS);
+  }
+
+  window._done = true;
+  document.getElementById('status').textContent = 'DONE!';
+  return results;
+}
+
+// Load member IDs from window._memberIds (set by caller)
+function start() {
+  if (window._memberIds && window._memberIds.length > 0) {
+    scrapeAll(window._memberIds);
+  } else {
+    document.getElementById('status').textContent = 'Waiting for member IDs... Set window._memberIds and call start()';
+  }
+}
+
+// Auto-start if IDs are pre-set
+setTimeout(() => {
+  if (window._memberIds) start();
+}, 500);
+</script>
+</body>
+</html>
